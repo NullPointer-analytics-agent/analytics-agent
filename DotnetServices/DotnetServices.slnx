@@ -1,3 +1,5 @@
 <Solution>
+  <Project Path="DialogService/DialogService.csproj" />
+  <Project Path="LLMService/LLMService.csproj" />
   <Project Path="SharedClasses/SharedClasses.csproj" />
 </Solution>
