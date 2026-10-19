@@ -1,6 +1,18 @@
-var builder = WebApplication.CreateBuilder(args);
-var app = builder.Build();
+using Microsoft.SemanticKernel;
+using LLMChatService;
 
-app.MapGet("/", () => "Hello World!");
+WebApplicationBuilder builder = WebApplication.CreateBuilder();
+
+builder.Services.AddKernel();
+builder.Services.AddOpenAIChatCompletion(
+    modelId: "qwen2.5:7b",
+    apiKey: "none",
+    endpoint: new Uri("http://localhost:11434/v1")
+);
+
+
+WebApplication app = builder.Build();
+
+app.MapLLMChatEndpoints();
 
 app.Run();
