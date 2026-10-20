@@ -1,10 +1,12 @@
 ﻿using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+using OpenAI.Chat;
+using SharedClasses;
 
-namespace LLMChatService;
+namespace LlmService;
 
 public static class ChatEndpoints
 {
-
     public static IEndpointRouteBuilder MapLLMChatEndpoints(this IEndpointRouteBuilder app)
     {
         RouteGroupBuilder group = app.MapGroup("api/chat");
@@ -24,7 +26,24 @@ public static class ChatEndpoints
 
     private static async Task StreamText(Stream outputStream, Kernel kernel, CancellationToken connectionToken)
     {
-        string prompt = "Привет, напиши hello world на C# с комментариями";
+        var executionSettings = new OpenAIPromptExecutionSettings
+        {
+            ResponseFormat = typeof(BehaviourModel),
+            Temperature = 0.2f
+        };
+
+
+
+        string prompt = "Требования:\n" +
+                "Необходимо сформировать переменные состояния.\n" +
+                "Доступны 3 типа: Integer, Enum, Boolean.\n" +
+                "ВАЖНО: Поле 'EnumValues' должно заполняться ТОЛЬКО если VarType == 'Enum'. " +
+                "Для типов Integer и Boolean поле 'EnumValues' должно БЫТЬ СТРОГО null (не пустой список []).\n\n" +
+                "Описание явлений:\n" +
+                "1. Скорость машины от 0 до 90.\n" +
+                "2. Погода на улице (ясно, облачно, дождь).\n" +
+                "3. Светло ли на улице.";
+
 
 
         await using StreamWriter writer = new(outputStream);
@@ -35,7 +54,7 @@ public static class ChatEndpoints
 
         using CancellationTokenSource timeoutSource = new();
 
-        timeoutSource.CancelAfter(TimeSpan.FromSeconds(20));
+        timeoutSource.CancelAfter(TimeSpan.FromSeconds(40));
 
             
         using CancellationTokenSource linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
@@ -43,11 +62,13 @@ public static class ChatEndpoints
             timeoutSource.Token
         );
 
+        KernelArguments arguments = new (executionSettings);
 
         IAsyncEnumerable<StreamingKernelContent> result = kernel.InvokePromptStreamingAsync(
-            prompt,
+            promptTemplate: prompt,
+            arguments: arguments,
             cancellationToken: linkedSource.Token
-        );
+        ); 
 
         try
         {
