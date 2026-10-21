@@ -2,7 +2,7 @@
 
 public class SystemMessageDto(string message)
 {
-    public static readonly SystemMessageDto RequestStarted = new("RequestStarted");
+    public static readonly SystemMessageDto RequestStarted = new("Request Started");
     public static readonly SystemMessageDto ChunkRecieved = new("Chunk recieved");
     public static readonly SystemMessageDto LlmTimeout = new("LLM response timeout");
     public static readonly SystemMessageDto ClientTimeout = new("Client timeout");
