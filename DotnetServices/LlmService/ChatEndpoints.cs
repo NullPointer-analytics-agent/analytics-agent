@@ -2,12 +2,12 @@
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
-using OpenAI.Chat;
 using SharedClasses;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
+
 
 namespace LlmService;
 
@@ -19,121 +19,122 @@ public static class ChatEndpoints
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.Cyrillic, UnicodeRanges.BasicLatin)
     };
 
-    private static readonly string prompt = "Требования:\n" +
-                "Необходимо сформировать переменные состояния.\n" +
-                "Доступны 3 типа: Integer, Enum, Boolean.\n" +
-                "ВАЖНО: Поле 'EnumValues' должно заполняться ТОЛЬКО если VarType == 'Enum'. " +
-                "Для типов Integer и Boolean поле 'EnumValues' должно БЫТЬ СТРОГО null (не пустой список []).\n" +
-                "Укажи что ты за llm в поле LlmName\n\n" +
-                "Описание явлений:\n" +
-                "1. Скорость машины от 0 до 90.\n" +
-                "2. Погода на улице (ясно, облачно, дождь).\n" +
-                "3. Светло ли на улице.";
-
-    private static async Task SendDtoAsync(this StreamWriter writer, object? dto, CancellationToken token)
+    private static KernelArguments GetKernelArguments(string modelName)
     {
-        if (dto == null) return;
-        writer.WriteLine(JsonSerializer.Serialize(dto, serializerOptions));
-        await writer.FlushAsync(token);
-    }
-
-    public static IEndpointRouteBuilder MapLLMChatEndpoints(this IEndpointRouteBuilder app)
-    {
-        RouteGroupBuilder group = app.MapGroup("api/chat");
-
-        group.MapGet("/test", Get);
-
-        return app;
-    }
-
-    private static IResult Get(
-        Kernel kernel,
-        CancellationToken connectionToken,
-        [FromQuery] string modelName = "qwen")
-    {
-        return Results.Stream(
-            outputStream => GenerateAnswerAsync(outputStream, kernel, modelName, connectionToken),
-            contentType: "text/x-ndjson; charset=utf-8"
-        );
-    }
-
-    private static async Task GenerateAnswerAsync(Stream outputStream, Kernel kernel, string modelName, CancellationToken connectionToken)
-    {
-        await using StreamWriter writer = new(outputStream);
-
-
-        try
-        {
-            kernel.GetRequiredService<IChatCompletionService>(modelName);
-        }
-        catch (Exception)
-        {
-            await writer.SendDtoAsync(SystemMessageDto.ModelDoesNotExist, connectionToken);
-            return;
-        }
-
         OpenAIPromptExecutionSettings executionSettings = new()
         {
             ResponseFormat = typeof(BehaviourModel),
             Temperature = 0.2f,
             ServiceId = modelName
         };
+        return new(executionSettings);
+    }
+
+    private static readonly string prompt =
+        "Требования:\n" +
+        "Необходимо сформировать переменные состояния.\n" +
+        "Доступны 3 типа: Integer, Enum, Boolean.\n" +
+        "ВАЖНО: Поле 'EnumValues' должно заполняться ТОЛЬКО если VarType == 'Enum'. " +
+        "Для типов Integer и Boolean поле 'EnumValues' должно БЫТЬ СТРОГО null (не пустой список []).\n" +
+        "также необходимо заполнить текущие значения переменных\n" +
+        "Укажи что ты за llm в поле LlmName\n\n" +
+        "Описание явлений:\n" +
+        "1. Скорость машины от 0 до 90.\n" +
+        "2. Погода на улице (ясно, облачно, дождь).\n" +
+        "3. Светло ли на улице." +
+        "4. Начальное состояние: Машина едет со скоростью 45 км/ч в дождь ночью. ";
 
 
-        await writer.SendDtoAsync(SystemMessageDto.RequestStarted, connectionToken);
+    private static async Task SendDtoAsync(this HttpContext context, object? dto, CancellationToken token)
+    {
+        if (dto == null) return;
+        token.ThrowIfCancellationRequested();
+        await context.Response.WriteAsync($"{JsonSerializer.Serialize(dto, serializerOptions)}\n", token);
+    }
 
+    public static IEndpointRouteBuilder MapLLMChatEndpoints(this IEndpointRouteBuilder app)
+    {
+        RouteGroupBuilder group = app.MapGroup("api/chat");
 
-        using CancellationTokenSource timeoutSource = new();
+        group.MapGet("/test", GenerateAnswerAsync);
 
-        timeoutSource.CancelAfter(TimeSpan.FromSeconds(20));
+        return app;
+    }
 
-            
-        using CancellationTokenSource linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
-            connectionToken,
-            timeoutSource.Token
-        );
+    private static async Task GenerateAnswerAsync(
+        HttpContext context,
+        Kernel kernel,
+        CancellationToken connectionToken,
+        [FromQuery]string? modelName = "qwen")
+    {
+        context.Response.ContentType = "text/x-ndjson; charset=utf-8";
 
-        KernelArguments arguments = new (executionSettings);
-
-        IAsyncEnumerable<StreamingKernelContent> result = kernel.InvokePromptStreamingAsync(
-            promptTemplate: prompt,
-            arguments: arguments,
-            cancellationToken: linkedSource.Token
-        );
-        StringBuilder json = new();
 
         try
         {
-            await foreach (StreamingKernelContent chunk in result)
-            {
-
-                try
-                {
-                    string chunkText = chunk.ToString();
-                    await writer.SendDtoAsync(new ChunkDto(chunkText), linkedSource.Token);
-                    json.Append(chunkText);
-                }
-                catch (OperationCanceledException)
-                {
-                    await writer.SendDtoAsync(SystemMessageDto.ClientTimeout, linkedSource.Token);
-                    return;
-                }
-                timeoutSource.CancelAfter(TimeSpan.FromSeconds(10));
-            }
+            kernel.GetRequiredService<IChatCompletionService>(modelName);
         }
-        catch (OperationCanceledException)
+        catch (KernelException)
         {
-            await writer.SendDtoAsync(SystemMessageDto.LlmTimeout, linkedSource.Token);
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.SendDtoAsync(SystemMessageDto.ModelDoesNotExist, connectionToken);
             return;
         }
 
-        
-        BehaviourModel? behaviourModel = JsonSerializer.Deserialize<BehaviourModel>(json.ToString(), serializerOptions);
-        
-        //TODO: Dto validation
-        await writer.SendDtoAsync(behaviourModel, linkedSource.Token);
 
-        await writer.SendDtoAsync(SystemMessageDto.Finished, linkedSource.Token);
+        
+        await context.SendDtoAsync(SystemMessageDto.RequestStarted, connectionToken);
+
+
+        StringBuilder json = new();
+
+
+        CancellationTokenSource timeoutTokenSource = new();
+
+
+        timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(30)); // ожидание пока LLM проснется
+
+        CancellationTokenSource linkedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
+            connectionToken,
+            timeoutTokenSource.Token
+        );
+
+        IAsyncEnumerable<StreamingKernelContent> result = kernel.InvokePromptStreamingAsync(
+            promptTemplate: prompt,
+            arguments: GetKernelArguments(modelName),
+            cancellationToken: linkedTokenSource.Token
+        );
+
+
+        try
+        {
+            await foreach (StreamingKernelContent chunk in result.WithCancellation(linkedTokenSource.Token))
+            {
+                string chunkText = chunk.ToString();
+                timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(3)); // время на отправку чанка
+
+                await context.SendDtoAsync(new ChunkDto(chunkText), linkedTokenSource.Token); // сколько в худшем случае будет длиться это?
+                json.Append(chunkText);
+ 
+                timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(10)); // ожидание следующего токена после первого успешного получения
+            }
+        }
+
+        catch (OperationCanceledException)
+        {
+            if (!connectionToken.IsCancellationRequested)
+            {
+                await context.SendDtoAsync(SystemMessageDto.Timeout, connectionToken);
+            }
+            return;
+        }
+       
+        
+        BehaviourModel? behaviourModel = JsonSerializer.Deserialize<BehaviourModel>(json.ToString(), serializerOptions); 
+        
+        await context.SendDtoAsync(behaviourModel, connectionToken);
+
+        await context.SendDtoAsync(SystemMessageDto.Finished, connectionToken);
     }
 }
 
