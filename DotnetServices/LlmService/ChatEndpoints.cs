@@ -113,7 +113,11 @@ public static class ChatEndpoints
                     await writer.SendDtoAsync(new ChunkDto(chunkText), linkedSource.Token);
                     json.Append(chunkText);
                 }
-                catch (OperationCanceledException) { break; }
+                catch (OperationCanceledException)
+                {
+                    await writer.SendDtoAsync(SystemMessageDto.ClientTimeout, linkedSource.Token);
+                    return;
+                }
                 timeoutSource.CancelAfter(TimeSpan.FromSeconds(10));
             }
         }
