@@ -1,4 +1,5 @@
 ﻿using SharedClasses;
+using SharedClasses.ResponseDto;
 using System.Net.Http.Json;
 
 string prompt = """
@@ -54,6 +55,9 @@ while (true)
 {
     string? line = await reader.ReadLineAsync();
     if (line == null) break;
-    Console.WriteLine(line);
-}
 
+
+    ResponseDtoBase? responsePart = ResponseDtoBase.FromString(line);
+
+    Console.WriteLine(responsePart?.SerizlizeMultiLine() ?? "Error: response part is null");
+}
