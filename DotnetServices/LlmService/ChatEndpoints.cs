@@ -30,20 +30,6 @@ public static class ChatEndpoints
         return new(executionSettings);
     }
 
-    private static readonly string prompt =
-        "Требования:\n" +
-        "Необходимо сформировать переменные состояния.\n" +
-        "Доступны 3 типа: Integer, Enum, Boolean.\n" +
-        "ВАЖНО: Поле 'EnumValues' должно заполняться ТОЛЬКО если VarType == 'Enum'. " +
-        "Для типов Integer и Boolean поле 'EnumValues' должно БЫТЬ СТРОГО null (не пустой список []).\n" +
-        "также необходимо заполнить текущие значения переменных\n" +
-        "Укажи что ты за llm в поле LlmName\n\n" +
-        "Описание явлений:\n" +
-        "1. Скорость машины от 0 до 90.\n" +
-        "2. Погода на улице (ясно, облачно, дождь).\n" +
-        "3. Светло ли на улице." +
-        "4. Начальное состояние: Машина едет со скоростью 45 км/ч в дождь ночью. ";
-
 
     private static async Task SendDtoAsync(this HttpContext context, object? dto, CancellationToken token)
     {
@@ -56,19 +42,37 @@ public static class ChatEndpoints
     {
         RouteGroupBuilder group = app.MapGroup("api/chat");
 
-        group.MapGet("/test", GenerateAnswerAsync);
+        group.MapPost("/test", ExecutePromptAsync);
 
         return app;
+    }
+
+    private static Task ExecutePromptAsync(
+        HttpContext context,
+        Kernel kernel,
+        [FromBody] UserRequestDto prompt,
+        [FromQuery] string? modelName,
+        CancellationToken connectionToken
+    )
+    {
+        return GenerateAnswerAsync(
+            context,
+            kernel,
+            prompt.Prompt,
+            modelName ?? "qwen",
+            connectionToken
+        );
     }
 
     private static async Task GenerateAnswerAsync(
         HttpContext context,
         Kernel kernel,
-        CancellationToken connectionToken,
-        [FromQuery]string? modelName = "qwen")
+        string prompt,
+        string modelName,
+        CancellationToken connectionToken
+    )
     {
         context.Response.ContentType = "text/x-ndjson; charset=utf-8";
-
 
         try
         {
