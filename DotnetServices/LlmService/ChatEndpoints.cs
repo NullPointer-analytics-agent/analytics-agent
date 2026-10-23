@@ -10,16 +10,28 @@ namespace LlmService;
 
 public static class ChatEndpoints
 {
+    private const string SystemPrompt = """
+    System: Твоя задача — проанализировать запрос пользователя, определить его валидность и извлечь переменные состояния.
 
-    private static KernelArguments GetKernelArguments(string modelName)
+    ОСНОВНЫЕ ПРАВИЛА:
+    1. Имя модели (LlmName): Укажи свое реальное коммерческое название (например: "Qwen", "GPT-4o", "DeepSeek-R1"). Не используй заглушки.
+    2. Язык идентификаторов (VariableName): Имена всех переменных пиши строго на английском языке в стиле CamelCase или snake_case (например: 'carSpeed', 'weatherCondition', 'isDaylight').
+    3. Значения Enum (EnumValues): Пиши элементы перечислений на английском языке. Поле заполняется ТОЛЬКО если VarType == 'Enum', иначе должно быть null.
+
+    КРИТЕРИИ ВАЛИДНОСТИ (IsValidPrompt):
+    - Выстави true, если пользователь четко описал список явлений/состояний И указал их начальную конфигурацию (исходные значения).
+    - Выстави false, если запрос не по теме (просьбы посчитать, написать код, рассказать фильм) или в тексте не хватает данных для инициализации значений. В этом случае обязательно заполни поле 'ReasonIfInvalid' конкретной причиной на русском языке. Для валидных запросов оставь его пустым.
+    
+    """;
+
+    private static OpenAIPromptExecutionSettings GetExecutionSettings(string modelName)
     {
-        OpenAIPromptExecutionSettings executionSettings = new()
+        return new()
         {
             ResponseFormat = typeof(BehaviourModelDto),
             Temperature = 0.2f,
             ServiceId = modelName
         };
-        return new(executionSettings);
     }
 
 
@@ -59,16 +71,18 @@ public static class ChatEndpoints
     private static async Task GenerateAnswerAsync(
         HttpContext context,
         Kernel kernel,
-        string prompt,
+        string userPrompt,
         string modelName,
         CancellationToken connectionToken
     )
     {
         context.Response.ContentType = "text/x-ndjson; charset=utf-8";
 
+        IChatCompletionService? service = null;
+
         try
         {
-            kernel.GetRequiredService<IChatCompletionService>(modelName);
+            service = kernel.GetRequiredService<IChatCompletionService>(modelName);
         }
         catch (KernelException)
         {
@@ -94,10 +108,15 @@ public static class ChatEndpoints
             connectionToken,
             timeoutTokenSource.Token
         );
+        ChatHistory history = new();
 
-        IAsyncEnumerable<StreamingKernelContent> result = kernel.InvokePromptStreamingAsync(
-            promptTemplate: prompt,
-            arguments: GetKernelArguments(modelName),
+
+        history.AddSystemMessage(SystemPrompt);
+        history.AddUserMessage(userPrompt);
+
+        IAsyncEnumerable<StreamingChatMessageContent> result = service.GetStreamingChatMessageContentsAsync(
+            chatHistory: history,
+            executionSettings: GetExecutionSettings(modelName),
             cancellationToken: linkedTokenSource.Token
         );
 
