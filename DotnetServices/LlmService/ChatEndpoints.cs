@@ -5,10 +5,6 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 using SharedClasses;
 using SharedClasses.ResponseDto;
 using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Unicode;
-
 
 namespace LlmService;
 
@@ -137,4 +133,3 @@ public static class ChatEndpoints
         await context.SendDtoAsync(SystemMessageDto.Finished, connectionToken);
     }
 }
-
