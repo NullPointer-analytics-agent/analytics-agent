@@ -3,72 +3,68 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using SharedClasses;
+using SharedClasses.ResponseDto;
 using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Unicode;
-
 
 namespace LlmService;
 
 public static class ChatEndpoints
 {
-    private static readonly JsonSerializerOptions serializerOptions = new()
-    {
-        WriteIndented = false,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.Cyrillic, UnicodeRanges.BasicLatin)
-    };
 
     private static KernelArguments GetKernelArguments(string modelName)
     {
         OpenAIPromptExecutionSettings executionSettings = new()
         {
-            ResponseFormat = typeof(BehaviourModel),
+            ResponseFormat = typeof(BehaviourModelDto),
             Temperature = 0.2f,
             ServiceId = modelName
         };
         return new(executionSettings);
     }
 
-    private static readonly string prompt =
-        "Требования:\n" +
-        "Необходимо сформировать переменные состояния.\n" +
-        "Доступны 3 типа: Integer, Enum, Boolean.\n" +
-        "ВАЖНО: Поле 'EnumValues' должно заполняться ТОЛЬКО если VarType == 'Enum'. " +
-        "Для типов Integer и Boolean поле 'EnumValues' должно БЫТЬ СТРОГО null (не пустой список []).\n" +
-        "также необходимо заполнить текущие значения переменных\n" +
-        "Укажи что ты за llm в поле LlmName\n\n" +
-        "Описание явлений:\n" +
-        "1. Скорость машины от 0 до 90.\n" +
-        "2. Погода на улице (ясно, облачно, дождь).\n" +
-        "3. Светло ли на улице." +
-        "4. Начальное состояние: Машина едет со скоростью 45 км/ч в дождь ночью. ";
 
-
-    private static async Task SendDtoAsync(this HttpContext context, object? dto, CancellationToken token)
+    private static async Task SendDtoAsync(this HttpContext context, ResponseDtoBase? dto, CancellationToken token)
     {
         if (dto == null) return;
         token.ThrowIfCancellationRequested();
-        await context.Response.WriteAsync($"{JsonSerializer.Serialize(dto, serializerOptions)}\n", token);
+        await context.Response.WriteAsync($"{dto.SerializeOneLine()}\n", token);
     }
 
     public static IEndpointRouteBuilder MapLLMChatEndpoints(this IEndpointRouteBuilder app)
     {
         RouteGroupBuilder group = app.MapGroup("api/chat");
 
-        group.MapGet("/test", GenerateAnswerAsync);
+        group.MapPost("/test", ExecutePromptAsync);
 
         return app;
+    }
+
+    private static Task ExecutePromptAsync(
+        HttpContext context,
+        Kernel kernel,
+        [FromBody] UserRequestDto prompt,
+        [FromQuery] string? modelName,
+        CancellationToken connectionToken
+    )
+    {
+        return GenerateAnswerAsync(
+            context,
+            kernel,
+            prompt.Prompt,
+            modelName ?? "qwen",
+            connectionToken
+        );
     }
 
     private static async Task GenerateAnswerAsync(
         HttpContext context,
         Kernel kernel,
-        CancellationToken connectionToken,
-        [FromQuery]string? modelName = "qwen")
+        string prompt,
+        string modelName,
+        CancellationToken connectionToken
+    )
     {
         context.Response.ContentType = "text/x-ndjson; charset=utf-8";
-
 
         try
         {
@@ -86,7 +82,7 @@ public static class ChatEndpoints
         await context.SendDtoAsync(SystemMessageDto.RequestStarted, connectionToken);
 
 
-        StringBuilder json = new();
+        StringBuilder jsonBuilder = new();
 
 
         CancellationTokenSource timeoutTokenSource = new();
@@ -111,12 +107,12 @@ public static class ChatEndpoints
             await foreach (StreamingKernelContent chunk in result.WithCancellation(linkedTokenSource.Token))
             {
                 string chunkText = chunk.ToString();
-                timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(3)); // время на отправку чанка
+                timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(3));
 
-                await context.SendDtoAsync(new ChunkDto(chunkText), linkedTokenSource.Token); // сколько в худшем случае будет длиться это?
-                json.Append(chunkText);
+                await context.SendDtoAsync(new ChunkDto(chunkText), linkedTokenSource.Token);
+                jsonBuilder.Append(chunkText);
  
-                timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(10)); // ожидание следующего токена после первого успешного получения
+                timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(10));
             }
         }
 
@@ -129,12 +125,11 @@ public static class ChatEndpoints
             return;
         }
        
+        BehaviourModelDto? behaviourModel = BehaviourModelDto.FromString(jsonBuilder.ToString());
         
-        BehaviourModel? behaviourModel = JsonSerializer.Deserialize<BehaviourModel>(json.ToString(), serializerOptions); 
         
         await context.SendDtoAsync(behaviourModel, connectionToken);
 
         await context.SendDtoAsync(SystemMessageDto.Finished, connectionToken);
     }
 }
-

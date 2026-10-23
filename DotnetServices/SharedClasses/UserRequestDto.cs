@@ -1,6 +1,6 @@
 ﻿namespace SharedClasses;
 
-internal class UserRequestDto
+public class UserRequestDto
 {
     public string Prompt { get; set; } = string.Empty;
 }
