@@ -5,14 +5,28 @@
         <h2 class="auth-title">Агент-аналитик</h2>
         <button type="button" class="auth-close">✕</button>
     </div>
-
     <div class="auth-tabs">
-        <button type="button" class="auth-tab active">Регистрация</button>
-        <button type="button" class="auth-tab">Вход</button>
+        <button
+            type="button"
+            class="auth-tab"
+            :class="{ active: mode === 'register' }"
+            @click="mode = 'register'"
+        >
+            Регистрация
+        </button>
+
+        <button
+            type="button"
+            class="auth-tab"
+            :class="{ active: mode === 'login'}"
+            @click="mode = 'login'"
+        >
+            Вход
+        </button>
     </div>
 
-    <form class="auth-form">
-        <div class="auth-field">
+    <form class="auth-form" @submit.prevent="submitForm">
+        <div v-if="mode === 'register'" class="auth-field">
             <label for="name">Имя</label>
             <input id="name" type="text" placeholder="Ваше имя">
         </div>
@@ -27,11 +41,21 @@
             <input id="password" type="password" placeholder="Ваш пароль">
         </div>
 
-        <button type="submit" class="auth-button">Зарегистрироваться</button>
+        <button type="submit" class="auth-button">
+            {{ mode === 'register' ? 'Зарегистрироваться' : 'Войти' }}
+        </button>
     </form>
 
     <p class="auth-switch">
-        Есть аккаунт? <a href="#" class="auth-link">Войти</a>
+        {{ mode === 'register' ? 'Есть аккаунт?' : 'Нет аккаунта?' }}
+
+        <button
+            type="button"
+            class="auth-link"
+            @click="mode = mode === 'register' ? 'login' : 'register'"
+        >
+            {{ mode === 'register' ? 'Войти' : 'Зарегистрироваться' }}
+        </button>
     </p>
 
     <hr class="auth-divider">
@@ -45,6 +69,18 @@
     </nav>
   </aside>
 </template>
+
+
+<script setup lang="ts">
+import { ref } from 'vue'
+
+const mode = ref<'register' | 'login'>('register')
+
+function submitForm() {
+    console.log('Выбранный режим:', mode.value)
+}
+</script>
+
 
 <style scoped>
     .auth-panel {
