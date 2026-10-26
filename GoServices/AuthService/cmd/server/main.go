@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-
+	"github.com/rs/cors"
 	"github.com/NullPointer-analytics-agent/analytics-agent/GoServices/AuthService/internal/application"
 	"github.com/NullPointer-analytics-agent/analytics-agent/GoServices/AuthService/internal/repository/postgres"
 	"github.com/NullPointer-analytics-agent/analytics-agent/GoServices/AuthService/internal/token"
@@ -38,8 +38,15 @@ func main() {
 	http.HandleFunc("/api/auth/register", authHandler.Register)
 	http.HandleFunc("/api/auth/login", authHandler.Login)
 	http.HandleFunc("/api/auth/me", authHandler.Me)
+
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"http://localhost:5173"},
+		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type", "Authorization"},
+	})
+
 	log.Println("Сервер запущен на порту 8080")
-	err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", c.Handler(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal(err)
 	}
