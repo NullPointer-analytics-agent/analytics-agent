@@ -1,8 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.SemanticKernel;
+﻿using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using SharedClasses;
 using SharedClasses.ResponseDto;
+using LlmService.Exceptions;
+
 namespace LlmService;
 
 public static class ChatEndpoints
@@ -38,11 +39,10 @@ public static class ChatEndpoints
         {
             completionService = kernel.GetRequiredService<IChatCompletionService>(modelName);
         }
+
         catch (KernelException)
         {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            await context.SendDtoAsync(new SystemStatusDto(SystemStatus.LlmNameNotFound), connectionToken);
-            return;
+            throw new InvalidLlmNameException();
         }
 
         IAsyncEnumerable<ResponseDtoBase> response = handler.GenerateAnswerAsync(
@@ -52,9 +52,11 @@ public static class ChatEndpoints
             connectionToken
         );
 
-        await foreach(ResponseDtoBase part in response)
+        await context.SendDtoAsync(new SystemStatusDto(SystemStatus.RequestStarted), connectionToken);
+        await foreach (ResponseDtoBase part in response)
         {
             await context.SendDtoAsync(part, connectionToken);
         }
+        await context.SendDtoAsync(new SystemStatusDto(SystemStatus.RequestFinished), connectionToken);
     }
 }
