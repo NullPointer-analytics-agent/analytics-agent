@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="ConsoleClient/ConsoleClient.csproj" Id="d93c89ec-0366-478f-b301-296bcb3791ca" />
+  <Project Path="DialogService/DialogService.csproj" />
+  <Project Path="LlmService/LlmService.csproj" />
+  <Project Path="SharedClasses/SharedClasses.csproj" />
+</Solution>
