@@ -5,6 +5,9 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder();
 
 builder.Services.AddKernel();
 
+builder.Services.AddSingleton<PromptParameters>();
+builder.Services.AddSingleton<IPromptHandler, PromptHandler>();
+
 builder.Services.AddOpenAIChatCompletion(
 
     modelId: "qwen2.5:7b",
@@ -19,6 +22,9 @@ builder.Services.AddOpenAIChatCompletion(
     endpoint: new Uri("http://localhost:11434/v1"),
     serviceId: "gemma"
 );
+
+builder.Services.AddSingleton<PromptParameters>();
+
 
 WebApplication app = builder.Build();
 

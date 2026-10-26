@@ -13,7 +13,6 @@ string prompt = """
 """;
 
 
-
 UserRequestDto body = new()
 {
     Prompt = prompt
@@ -23,7 +22,7 @@ UserRequestDto body = new()
 using HttpRequestMessage request = new()
 {
     Method = HttpMethod.Post,
-    RequestUri = new Uri("http://localhost:5155/api/chat/test"),
+    RequestUri = new Uri("http://localhost:5155/api/chat"),
     Content = JsonContent.Create(body)
 };
 

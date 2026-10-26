@@ -8,7 +8,7 @@ namespace SharedClasses.ResponseDto;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(BehaviourModelDto), "behaviour_model")]
 [JsonDerivedType(typeof(ChunkDto), "chunk_dto")]
-[JsonDerivedType(typeof(SystemMessageDto), "system_message_dto")]
+[JsonDerivedType(typeof(SystemStatusDto), "system_status_dto")]
 public abstract class ResponseDtoBase
 {
     protected static readonly JsonSerializerOptions MultiLine = new()
