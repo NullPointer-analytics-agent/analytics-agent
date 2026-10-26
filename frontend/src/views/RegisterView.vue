@@ -38,7 +38,6 @@ async function handleRegister() {
       <h2 class="auth-title">Агент-аналитик</h2>
       <button type="button" class="auth-close">✕</button>
     </div>
-
     <div class="auth-tabs">
       <button type="button" class="auth-tab active">Регистрация</button>
       <RouterLink to="/login" type="button" class="auth-tab">Вход</RouterLink>
@@ -48,7 +47,6 @@ async function handleRegister() {
       <div class="auth-field">
         <label for="name">Имя</label>
         <input v-model="form.name" id="name" type="text" placeholder="Ваше имя" />
-        {{ form.name }}
       </div>
 
       <div class="auth-field">
