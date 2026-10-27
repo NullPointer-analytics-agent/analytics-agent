@@ -8,10 +8,7 @@ public enum SystemStatus
 {
     InvalidLlmName,
     RequestStarted,
-    LlmTimeout,
-    IterationTimeout,
-    BehaviourModelInvalid,
-    RequestFinished
+    BehaviourModelInvalid
 }
 
 public class SystemStatusDto(SystemStatus status): ResponseDtoBase

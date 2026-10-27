@@ -15,14 +15,6 @@ public class ExceptionMiddleware: IMiddleware
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.SendDtoAsync(new SystemStatusDto(SystemStatus.InvalidLlmName), context.RequestAborted);
         }
-        catch (LlmTimeoutException)
-        {
-            await context.SendDtoAsync(new SystemStatusDto(SystemStatus.LlmTimeout), context.RequestAborted);
-        }
-        catch (IterationTimeoutException)
-        {
-            await context.SendDtoAsync(new SystemStatusDto(SystemStatus.IterationTimeout), context.RequestAborted);
-        }
         catch (InvalidBehaviourModelException)
         {
             await context.SendDtoAsync(new SystemStatusDto(SystemStatus.BehaviourModelInvalid), context.RequestAborted);

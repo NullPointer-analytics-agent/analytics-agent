@@ -28,11 +28,6 @@ public class PromptHandler: IPromptHandler
         [EnumeratorCancellation] CancellationToken connectionToken = default
     )
     { 
-        using CancellationTokenSource timeoutTokenSource = new();
-        using CancellationTokenSource linkedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
-            connectionToken,
-            timeoutTokenSource.Token
-        );
 
         ChatHistory history = [];
         history.AddSystemMessage(promptParameters.SystemPrompt);
@@ -41,46 +36,25 @@ public class PromptHandler: IPromptHandler
         await using IAsyncEnumerator<StreamingChatMessageContent> resultEnumerator = completionService.GetStreamingChatMessageContentsAsync(
             chatHistory: history,
             executionSettings: promptParameters.PromptExecutionSettings,
-            cancellationToken: linkedTokenSource.Token
-        ).GetAsyncEnumerator(linkedTokenSource.Token);
+            cancellationToken: connectionToken
+        ).GetAsyncEnumerator(connectionToken);
 
         StringBuilder jsonBuilder = new();
 
-        timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(30));
 
         while (true)
         {
-            try
-            {
-                if (!await resultEnumerator.MoveNextAsync()) break;
-            }
-            catch (OperationCanceledException)
-            {
-                if (!connectionToken.IsCancellationRequested)
-                {
-                    throw new LlmTimeoutException();
-                }
-                else throw;
-            }
+            if (!await resultEnumerator.MoveNextAsync()) break;
 
             string chunkText = resultEnumerator.Current.ToString();
-
             jsonBuilder.Append(chunkText);
 
-            timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(10));
-
             yield return new ChunkDto(chunkText);
-
-            if (timeoutTokenSource.IsCancellationRequested)
-            {
-                throw new IterationTimeoutException();
-            }
-
-            timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(3));
-        }
+        }   
 
         BehaviourModelDto? behaviourModel = BehaviourModelDto.FromString(jsonBuilder.ToString());
         //Todo: advanced validation
+        behaviourModel = null;
         if (behaviourModel == null) throw new InvalidBehaviourModelException();
         yield return behaviourModel;
     }

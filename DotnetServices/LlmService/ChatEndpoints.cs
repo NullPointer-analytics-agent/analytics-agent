@@ -33,7 +33,7 @@ public static class ChatEndpoints
 
         context.Response.ContentType = "text/x-ndjson; charset=utf-8";
 
-        IChatCompletionService? completionService = null;
+        IChatCompletionService? completionService;
 
         try
         {
@@ -57,6 +57,5 @@ public static class ChatEndpoints
         {
             await context.SendDtoAsync(part, connectionToken);
         }
-        await context.SendDtoAsync(new SystemStatusDto(SystemStatus.RequestFinished), connectionToken);
     }
 }
