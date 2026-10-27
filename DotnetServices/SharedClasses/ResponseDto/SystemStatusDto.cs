@@ -6,12 +6,9 @@ namespace SharedClasses.ResponseDto;
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SystemStatus
 {
-    LlmNameNotFound,
+    InvalidLlmName,
     RequestStarted,
-    LlmTimeout,
-    IterationTimeout,
-    BehaviourModelSerializationError,
-    Finished
+    BehaviourModelInvalid
 }
 
 public class SystemStatusDto(SystemStatus status): ResponseDtoBase

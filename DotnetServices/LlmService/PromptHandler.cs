@@ -3,7 +3,7 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using SharedClasses.ResponseDto;
 using System.Runtime.CompilerServices;
 using System.Text;
-
+using LlmService.Exceptions;
 
 namespace LlmService;
 
@@ -18,17 +18,9 @@ public interface IPromptHandler
     );
 }
 
+
 public class PromptHandler: IPromptHandler
 {
-    private enum ExecutionStatus
-    {
-        InProgress,
-        IterationTimeout,
-        LlmTimeout,
-        ConnectionCancellation,
-        Finished
-    }
-
     public async IAsyncEnumerable<ResponseDtoBase> GenerateAnswerAsync(
         string userPrompt,
         PromptParameters promptParameters,
@@ -37,93 +29,33 @@ public class PromptHandler: IPromptHandler
     )
     { 
 
-        yield return new SystemStatusDto(SystemStatus.RequestStarted);
-
-
-        StringBuilder jsonBuilder = new();
-
-
-        using CancellationTokenSource timeoutTokenSource = new();
-        using CancellationTokenSource linkedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
-            connectionToken,
-            timeoutTokenSource.Token
-        );
-
-
         ChatHistory history = [];
         history.AddSystemMessage(promptParameters.SystemPrompt);
         history.AddUserMessage(userPrompt);
 
-
-
         await using IAsyncEnumerator<StreamingChatMessageContent> resultEnumerator = completionService.GetStreamingChatMessageContentsAsync(
             chatHistory: history,
             executionSettings: promptParameters.PromptExecutionSettings,
-            cancellationToken: linkedTokenSource.Token
-        ).GetAsyncEnumerator(linkedTokenSource.Token);
+            cancellationToken: connectionToken
+        ).GetAsyncEnumerator(connectionToken);
+
+        StringBuilder jsonBuilder = new();
 
 
-        timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(30));
-
-        ExecutionStatus status = ExecutionStatus.InProgress;
-
-
-        while (status == ExecutionStatus.InProgress)
+        while (true)
         {
-            try
-            {
-                bool inProgress = await resultEnumerator.MoveNextAsync();
-                if(!inProgress) status = ExecutionStatus.Finished;
-            }
-            catch (OperationCanceledException)
-            {
-                if (!connectionToken.IsCancellationRequested)
-                {
-                    status = ExecutionStatus.LlmTimeout;
-                    break;
-                }
-                else throw;
-            }
-            if (status != ExecutionStatus.InProgress) break;
+            if (!await resultEnumerator.MoveNextAsync()) break;
 
             string chunkText = resultEnumerator.Current.ToString();
-
             jsonBuilder.Append(chunkText);
 
-            timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(10));
-
             yield return new ChunkDto(chunkText);
+        }   
 
-            if (timeoutTokenSource.IsCancellationRequested)
-            {
-                status = ExecutionStatus.IterationTimeout;
-                break;
-            }
-
-            timeoutTokenSource.CancelAfter(TimeSpan.FromSeconds(3));
-        }
-
-        if(status == ExecutionStatus.IterationTimeout)
-        {
-            yield return new SystemStatusDto(SystemStatus.IterationTimeout);
-            yield break;
-        }
-
-        if (status == ExecutionStatus.LlmTimeout)
-        {
-            yield return new SystemStatusDto(SystemStatus.LlmTimeout);
-            yield break;
-        }
-
-        if (status == ExecutionStatus.Finished)
-        {
-            BehaviourModelDto? behaviourModel = BehaviourModelDto.FromString(jsonBuilder.ToString());
-
-            if (behaviourModel != null) yield return behaviourModel;
-            else yield return new SystemStatusDto(SystemStatus.BehaviourModelSerializationError);
-
-            yield return new SystemStatusDto(SystemStatus.Finished);
-            yield break;
-        }
+        BehaviourModelDto? behaviourModel = BehaviourModelDto.FromString(jsonBuilder.ToString());
+        //Todo: advanced validation
+        behaviourModel = null;
+        if (behaviourModel == null) throw new InvalidBehaviourModelException();
+        yield return behaviourModel;
     }
 }
