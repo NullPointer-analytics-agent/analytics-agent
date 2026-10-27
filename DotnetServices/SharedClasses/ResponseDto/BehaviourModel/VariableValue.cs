@@ -1,4 +1,4 @@
-﻿namespace SharedClasses;
+﻿namespace SharedClasses.ResponseDto.BehaviourModel;
 
 public class VariableValue
 {

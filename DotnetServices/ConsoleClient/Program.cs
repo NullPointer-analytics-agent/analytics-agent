@@ -2,7 +2,7 @@
 using SharedClasses.ResponseDto;
 using System.Net.Http.Json;
 
-string prompt = """
+string userPrompt = """
 Явления:
     Скорость машины от 0 до 90.
     Погода на улице (ясно, облачно, дождь).
@@ -10,12 +10,15 @@ string prompt = """
 
 Начальное состояние:
     Машина едет со скоростью 78 км/ч в дождь ночью.
+
+Условие:
+    на улице светло, и скорость машины равна 40 либо погода солнечная
 """;
 
 
 UserRequestDto body = new()
 {
-    Prompt = prompt
+    Prompt = userPrompt
 };
 
 
