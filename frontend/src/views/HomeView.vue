@@ -1,7 +1,6 @@
 <template>
   <div class="home-page">
 
-    <!-- Верхняя панель сайта -->
     <header class="header">
       <div class="header-left">
         <button type="button" class="menu-button" aria-label="Открыть меню">
@@ -19,10 +18,7 @@
       </div>
     </header>
 
-    <!-- Основная часть стартовой страницы -->
     <main class="main-content">
-
-      <!-- Заголовок и описание -->
       <section class="hero">
         <p class="hero-label">Проверка требований перебором</p>
 
@@ -61,8 +57,6 @@
           </div>
         </form>
       </section>
-
-      <!-- Три шага работы сервиса -->
       <section class="steps">
 
         <div class="step">
@@ -86,35 +80,32 @@
 </template>
 
 <style scoped>
-/* Общие настройки страницы */
 .home-page {
   box-sizing: border-box;
+  width: 100%;
   min-height: 100vh;
-  padding: 12px 8px 18px;
-  background-color: #f4f5f1;
+  padding: 0;
+  background-color: #f4f6f3;
   color: #19231f;
   font-family: Arial, sans-serif;
 }
 
-/* Верхняя панель */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 74px;
+  height: 74px;
   padding: 0 42px;
   background-color: #ffffff;
   border-bottom: 1px solid #dce2dd;
 }
 
-/* Левая часть шапки: меню и название */
 .header-left {
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-/* Кнопка меню */
 .menu-button {
   display: flex;
   flex-direction: column;
@@ -130,7 +121,6 @@
   cursor: pointer;
 }
 
-/* Три полоски внутри кнопки меню */
 .menu-button span {
   display: block;
   width: 18px;
@@ -139,7 +129,6 @@
   border-radius: 2px;
 }
 
-/* Название сайта */
 .logo {
   margin: 0;
   color: #19231f;
@@ -147,14 +136,12 @@
   font-weight: 700;
 }
 
-/* Правая часть шапки */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-/* Общие стили кнопок входа и регистрации */
 .login-button,
 .register-button {
   display: inline-flex;
@@ -168,7 +155,6 @@
   transition: background-color 0.2s, color 0.2s;
 }
 
-/* Кнопка «Войти» */
 .login-button {
   color: #19231f;
   background-color: #ffffff;
@@ -179,7 +165,6 @@
   background-color: #f1f5f2;
 }
 
-/* Кнопка «Регистрация» */
 .register-button {
   color: #ffffff;
   background-color: #0f806d;
@@ -190,24 +175,21 @@
   background-color: #0b6c5c;
 }
 
-/* Основная область страницы */
 .main-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: calc(100vh - 104px);
-  padding: 52px 24px 42px;
+  min-height: calc(100vh - 74px);
+  padding: 38px 24px 24px;
   background-color: #f4f6f3;
 }
 
-/* Блок с заголовком и описанием */
 .hero {
   width: 100%;
   max-width: 850px;
   text-align: center;
 }
 
-/* Небольшая подпись над заголовком */
 .hero-label {
   display: inline-block;
   margin: 0 0 26px;
@@ -219,7 +201,6 @@
   line-height: 1.4;
 }
 
-/* Главный заголовок */
 .hero-title {
   margin: 0;
   color: #19231f;
@@ -229,7 +210,6 @@
   letter-spacing: -1.5px;
 }
 
-/* Описание под заголовком */
 .hero-description {
   margin: 26px 0 0;
   color: #697670;
@@ -237,7 +217,6 @@
   line-height: 1.5;
 }
 
-/* Белая карточка для ввода требований */
 .requirements-card {
   box-sizing: border-box;
   width: 100%;
@@ -249,20 +228,17 @@
   border-radius: 17px;
 }
 
-/* Форма внутри карточки */
 .requirements-form {
   display: flex;
   flex-direction: column;
 }
 
-/* Подпись поля */
 .requirements-label {
   margin-bottom: 10px;
   color: #52615a;
   font-size: 14px;
 }
 
-/* Большое поле для текста */
 .requirements-input {
   box-sizing: border-box;
   width: 100%;
@@ -280,18 +256,15 @@
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-/* Цвет текста-подсказки в поле */
 .requirements-input::placeholder {
   color: #858b87;
 }
 
-/* Оформление поля при нажатии */
 .requirements-input:focus {
   border-color: #0f806d;
   box-shadow: 0 0 0 3px rgba(15, 128, 109, 0.12);
 }
 
-/* Нижняя строка карточки */
 .form-bottom {
   display: flex;
   align-items: center;
@@ -300,7 +273,6 @@
   margin-top: 20px;
 }
 
-/* Подсказка о сохранении диалогов */
 .form-hint {
   margin: 0;
   color: #697670;
@@ -308,7 +280,6 @@
   line-height: 1.5;
 }
 
-/* Кнопка проверки требований */
 .check-button {
   flex-shrink: 0;
   min-height: 48px;
@@ -327,7 +298,6 @@
   background-color: #0b6c5c;
 }
 
-/* Три шага под карточкой */
 .steps {
   display: flex;
   align-items: center;
@@ -337,14 +307,12 @@
   margin-top: 25px;
 }
 
-/* Один шаг */
 .step {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-/* Чёрный круг с номером */
 .step-number {
   display: flex;
   align-items: center;
@@ -358,7 +326,6 @@
   font-size: 14px;
 }
 
-/* Текст шага */
 .step-text {
   margin: 0;
   color: #19231f;
@@ -366,7 +333,6 @@
   font-weight: 500;
 }
 
-/* Адаптация для небольших экранов */
 @media (max-width: 700px) {
   .home-page {
     padding: 8px;
@@ -446,32 +412,6 @@
     flex-direction: column;
     gap: 16px;
     margin-top: 24px;
-  }
-}
-
-/* Дополнительная адаптация для очень узких экранов */
-@media (max-width: 400px) {
-  .header {
-    padding: 0 8px;
-  }
-
-  .logo {
-    font-size: 15px;
-  }
-
-  .menu-button {
-    width: 34px;
-    height: 38px;
-  }
-
-  .login-button,
-  .register-button {
-    padding: 0 7px;
-    font-size: 12px;
-  }
-
-  .hero-title {
-    font-size: 30px;
   }
 }
 </style>
