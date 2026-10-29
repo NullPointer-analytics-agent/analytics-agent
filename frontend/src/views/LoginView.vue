@@ -3,6 +3,8 @@ import { reactive, ref } from 'vue'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import AuthCard from '@/components/AuthComponent.vue'
+import '@/assets/auth.css'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -92,17 +94,7 @@ async function handleLogin() {
 </script>
 
 <template>
-  <aside class="auth-panel">
-    <div class="auth-header">
-      <h2 class="auth-title">Агент-аналитик</h2>
-      <button type="button" class="auth-close">✕</button>
-    </div>
-
-    <div class="auth-tabs">
-      <RouterLink type="button" class="auth-tab" to="/register">Регистрация</RouterLink>
-      <button type="button" class="auth-tab active">Вход</button>
-    </div>
-
+  <AuthCard mode="login">
     <form class="auth-form" @submit.prevent="handleLogin">
       <div class="auth-field">
         <label for="email">Email</label>
@@ -123,24 +115,7 @@ async function handleLogin() {
       </button>
       <p v-if="error.message" class="error">{{ error.message }}</p>
     </form>
-
-    <p class="auth-switch">
-      Есть аккаунт?
-      <RouterLink class="link-underline" to="/register">Зарегистрироваться</RouterLink>
-    </p>
-
-    <hr class="auth-divider" />
-
-    <nav class="auth-menu">
-      <ul>
-        <li><a href="#">Главная</a></li>
-        <li><a href="#">Как это работает</a></li>
-        <li><a href="#">Примеры требований</a></li>
-      </ul>
-    </nav>
-  </aside>
+  </AuthCard>
 </template>
 
-<style>
-@import '@/assets/auth.css';
-</style>
+<style></style>

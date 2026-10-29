@@ -1,6 +1,5 @@
 <template>
   <div class="home-page">
-
     <header class="header">
       <div class="header-left">
         <button type="button" class="menu-button" aria-label="Открыть меню">
@@ -13,8 +12,8 @@
       </div>
 
       <div class="header-actions">
-        <a href="/login" class="login-button">Войти</a>
-        <a href="/register" class="register-button">Регистрация</a>
+        <RouterLink to="/login" class="login-button">Войти</RouterLink>
+        <RouterLink to="/register" class="register-button">Регистрация</RouterLink>
       </div>
     </header>
 
@@ -28,7 +27,9 @@
         </h2>
 
         <p class="hero-description">
-          Опишите правила системы обычным текстом. Агент построит модель,<br class="desktop-break" />
+          Опишите правила системы обычным текстом. Агент построит модель,<br
+            class="desktop-break"
+          />
           проверит все сценарии и покажет, где они ломаются.
         </p>
       </section>
@@ -36,9 +37,7 @@
       <!-- Карточка для ввода требований -->
       <section class="requirements-card">
         <form class="requirements-form">
-          <label for="requirements" class="requirements-label">
-            Ваши требования
-          </label>
+          <label for="requirements" class="requirements-label"> Ваши требования </label>
 
           <textarea
             id="requirements"
@@ -47,18 +46,13 @@
           ></textarea>
 
           <div class="form-bottom">
-            <p class="form-hint">
-              Чтобы сохранять диалоги, войдите в аккаунт
-            </p>
+            <p class="form-hint">Чтобы сохранять диалоги, войдите в аккаунт</p>
 
-            <button type="button" class="check-button">
-              Проверить требования
-            </button>
+            <button type="button" class="check-button">Проверить требования</button>
           </div>
         </form>
       </section>
       <section class="steps">
-
         <div class="step">
           <span class="step-number">1</span>
           <p class="step-text">Опишите правила</p>
@@ -73,7 +67,6 @@
           <span class="step-number">3</span>
           <p class="step-text">Получите сценарий</p>
         </div>
-
       </section>
     </main>
   </div>
@@ -152,7 +145,9 @@
   border-radius: 12px;
   font-size: 16px;
   text-decoration: none;
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .login-button {
@@ -253,7 +248,9 @@
   font-size: 15px;
   line-height: 1.5;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .requirements-input::placeholder {
