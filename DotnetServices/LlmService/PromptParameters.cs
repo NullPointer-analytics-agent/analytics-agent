@@ -11,50 +11,45 @@ public class PromptParameters
         Temperature = 0.1f
     };
 
-    public string SystemPrompt { get; } = """
-    Твоя задача — проанализировать запрос пользователя и заполнить модель поведения.
+    public string BasicRules { get; } = """
+    ## ЗАДАЧА
+    1. Пользователь опишет явления (состояния) и логическое условие.
+    2. В поле LlmName JSON-ответа укажи название модели (например, "Qwen", "Llama").
+    3. Строго следуй инструкциям из других системных сообщений.
+    """;
 
-    ## ПРАВИЛА ИМЕНОВАНИЯ
-    - VariableName: английский язык, camelCase (например: carSpeed, weatherCondition, isDaylight).
-    - EnumValues: английский язык, нижний регистр (например: sunny, cloudy, rainy).
-    - LlmName: укажи свое реальное название (например, "Qwen2.5").
+    public string DefinitionsRules { get; } = """
+    ## ГЕНЕРАЦИЯ MASSIVE "Definitions"
+    Выдели из блока «Явления» переменные и создай массив объектов по правилам:
+    1. VariableName (string): перевод на английский, строго camelCase (пример: ballSize, floorType). Boolean-переменные начинай с is/has/can (пример: isOnFloor).
+    2. VarType (string): строго одно из "Integer", "Enum", "Boolean".
+    3. Заполнение полей по типам:
+       - "Integer": IntegerMin и IntegerMax — целые числа (если границ нет, строго 0 и 100). EnumValues = null.
+       - "Enum": EnumValues — массив строк на английском в нижнем регистре (пример: ["red", "blue"]). IntegerMin/Max = null.
+       - "Boolean": IntegerMin, IntegerMax, EnumValues строго = null.
+    """;
 
-    ## ПРАВИЛА ЗАПОЛНЕНИЯ ЗНАЧЕНИЙ (Values)
-    Для каждой переменной в списке Values заполни ТОЛЬКО ОДНО поле значения в зависимости от её типа (VarType):
-    - Integer → заполни только IntegerCurrentValue (остальные сделай null).
-    - Enum → заполни только EnumCurrentValue (значение должно строго совпадать с одним из EnumValues, остальные сделай null).
-    - Boolean → заполни только BooleanCurrentValue (остальные сделай null).
+    public string ExpressionRules { get; } = """
+    ## ГЕНЕРАЦИЯ ОБЪЕКТА "Expression" (Рекурсивное дерево условий)
+    ### ЖЕСТКИЕ ПРАВИЛА СТРУКТУРЫ:
+    1. КОРНЕМ может быть только оператор (And, Or, Not, Equal).
+    2. Variable и Value — это всегда листья. Могут быть детьми ТОЛЬКО у узла Equal.
+    3. Операторы And, Or, Not ссылаются ТОЛЬКО на другие операторы (Equal, And, Or, Not). Напрямую содержать Variable/Value они НЕ могут.
+    4. Все неиспользуемые в типе узла поля строго = null.
 
-    ## ПРАВИЛА ПОСТРОЕНИЯ ДЕРЕВА ВЫРАЖЕНИЙ (RootExpression)
-    Дерево состоит из узлов ExpressionElement. Каждый узел имеет строго один Type. Заполняй поля СТРОГО по следующим правилам, все неиспользуемые поля делай null:
+    ### ЗАПОЛНЕНИЕ ПО ТИПАМ УЗЛОВ:
+    1. Type: "Variable" -> Заполни VariableName (из Definitions). Остальные поля = null.
+    2. Type: "Value" -> Заполни объект Value:
+       - Для Integer: {"VariableType": "Integer", "IntegerValue": X, "EnumValue": null, "BooleanVaLue": null}
+       - Для Enum: {"VariableType": "Enum", "IntegerValue": null, "EnumValue": "X", "BooleanVaLue": null}
+       - Для Boolean: {"VariableType": "Boolean", "IntegerValue": null, "EnumValue": null, "BooleanVaLue": true/false}
+       Остальные поля узла = null.
+    3. Type: "Equal" -> Заполни BinaryLeftChild и BinaryRightChild (внутри них строго Variable или Value).
+    4. Type: "And" / "Or" -> Заполни BinaryLeftChild и BinaryRightChild (внутри них Equal, And, Or или Not).
+    5. Type: "Not" -> Заполни UnaryChild (внутри Equal, And, Or или Not).
 
-    1. Если Type = "Operand" (проверка: переменная == значение):
-       - Заполни ТОЛЬКО OperandValue (укажи VariableName и целевое значение).
-       - BinaryLeftChild = null, BinaryRightChild = null, UnaryChild = null.
-
-    2. Если Type = "UnaryOperatorNot" (проверка: переменная != значение):
-       - Заполни ТОЛЬКО UnaryChild (внутри должен быть узел типа "Operand").
-       - OperandValue = null, BinaryLeftChild = null, BinaryRightChild = null.
-       - ВАЖНО: Используй ТОЛЬКО если в тексте есть явное отрицание ("не", "нет", "не равно"). Например: "не светло", "не дождь", "скорость не равна 40".
-
-    3. Если Type = "BinaryOperatorAnd" (логическое И):
-       - Заполни ТОЛЬКО BinaryLeftChild и BinaryRightChild (любые узлы выражения).
-       - OperandValue = null, UnaryChild = null.
-
-    4. Если Type = "BinaryOperatorOr" (логическое ИЛИ):
-       - Заполни ТОЛЬКО BinaryLeftChild и BinaryRightChild (любые узлы выражения).
-       - OperandValue = null, UnaryChild = null.
-
-    ## ПРАВИЛА ИНТЕРПРЕТАЦИИ УСЛОВИЙ
-    - "светло" → Operand с BooleanCurrentValue = true (НЕ используй UnaryOperatorNot)
-    - "не светло" → UnaryOperatorNot с Operand внутри (BooleanCurrentValue = true)
-    - "дождь" → Operand с EnumCurrentValue = "rainy"
-    - "не дождь" → UnaryOperatorNot с Operand внутри (EnumCurrentValue = "rainy")
-    - "скорость равна 40" → Operand с IntegerCurrentValue = 40
-    - "скорость не равна 40" → UnaryOperatorNot с Operand внутри (IntegerCurrentValue = 40)
-
-    ## КРИТЕРИИ ВАЛИДНОСТИ (IsValidPrompt)
-    - Выстави true, если пользователь описал явления, их начальные значения и логическое условие.
-    - Выстави false, если запрос не по теме или не хватает данных. В этом случае обязательно заполни ReasonIfInvalid на русском языке.
+    ### СОВМЕСТИМОСТЬ:
+    - Equal сравнивает любые два значения одинакового типа.
+    - And, Or, Not объединяют/инвертируют только Boolean-результаты других операторов.
     """;
 }

@@ -31,7 +31,9 @@ public class PromptHandler: IPromptHandler
     { 
 
         ChatHistory history = [];
-        history.AddSystemMessage(promptParameters.SystemPrompt);
+        history.AddSystemMessage(promptParameters.BasicRules);
+        history.AddSystemMessage(promptParameters.DefinitionsRules);
+        history.AddSystemMessage(promptParameters.ExpressionRules);
         history.AddUserMessage(userPrompt);
 
         await using IAsyncEnumerator<StreamingChatMessageContent> resultEnumerator = completionService.GetStreamingChatMessageContentsAsync(

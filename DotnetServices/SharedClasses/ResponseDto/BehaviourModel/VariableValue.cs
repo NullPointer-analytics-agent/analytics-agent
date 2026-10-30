@@ -2,11 +2,8 @@
 
 public class VariableValue
 {
-    public string VariableName { get; set; } = string.Empty;
-
-    public int? IntegerCurrentValue { get; set; }
-
-    public string? EnumCurrentValue { get; set; }
-
-    public bool? BooleanCurrentValue { get; set; }
+    public TypeOfVariable VariableType { get; set; }
+    public int? IntegerValue { get; set; }
+    public string? EnumValue { get; set; }
+    public bool? BooleanVaLue { get; set; }
 }
