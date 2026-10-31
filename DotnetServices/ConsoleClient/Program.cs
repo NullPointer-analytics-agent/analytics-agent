@@ -1,18 +1,21 @@
 ﻿using SharedClasses;
 using SharedClasses.ResponseDto;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 
 string userPrompt = """
 Явления:
-    Диаметр мяча от 3 до 5.
-    Находится ли мяч в воздухе.
-    Цвет пола в помещении (красный, белый, зеленый)
+    Яркость лампы (целое число от 0 до 100).
+    Режим освещения (день, ночь, вечер).
+    Датчик движения (включен или выключен).
 
 Начальное состояние:
-    Мяч диаметром 4 лежит на полу белого цвета.
+    Яркость лампы 0.
+    Режим освещения вечер.
+    Датчик движения выключен.
 
 Условие:
-    Мяч на полу, ИЛИ (его диаметр равен 5 И цвет пола не красный)
+    Датчик движения включен И (режим освещения ночь ИЛИ яркость меньше 30).
 """;
 
 
@@ -49,5 +52,12 @@ while (true)
 
     ResponseDtoBase? responsePart = ResponseDtoBase.FromString(line);
 
-    Console.WriteLine(responsePart?.SerializeMultiLine() ?? "Error: response part is null");
+    if(responsePart is ChunkDto chunk)
+    {
+        string text = Regex.Unescape(chunk.ChunkText);
+
+        Console.Write(text);
+    }
+    else
+        Console.WriteLine(responsePart?.SerializeMultiLine() ?? "Error: response part is null");
 }
