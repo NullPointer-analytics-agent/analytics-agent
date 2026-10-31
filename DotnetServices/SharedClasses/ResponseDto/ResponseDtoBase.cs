@@ -1,4 +1,5 @@
-﻿using System.Text.Encodings.Web;
+﻿using SharedClasses.ResponseDto.BehaviourModel;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
@@ -15,12 +16,16 @@ public abstract class ResponseDtoBase
     {
         WriteIndented = true,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.Cyrillic, UnicodeRanges.BasicLatin),
+        Converters = { new JsonStringEnumConverter() },
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     protected static readonly JsonSerializerOptions OneLine = new()
     {
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.Cyrillic, UnicodeRanges.BasicLatin),
+        Converters = { new JsonStringEnumConverter() },
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
 

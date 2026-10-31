@@ -4,6 +4,7 @@ using SharedClasses.ResponseDto;
 using System.Runtime.CompilerServices;
 using System.Text;
 using LlmService.Exceptions;
+using SharedClasses.ResponseDto.BehaviourModel;
 
 namespace LlmService;
 
@@ -30,7 +31,7 @@ public class PromptHandler: IPromptHandler
     { 
 
         ChatHistory history = [];
-        history.AddSystemMessage(promptParameters.SystemPrompt);
+        promptParameters.AddSystemPromptsToHistory(history);
         history.AddUserMessage(userPrompt);
 
         await using IAsyncEnumerator<StreamingChatMessageContent> resultEnumerator = completionService.GetStreamingChatMessageContentsAsync(
@@ -54,7 +55,6 @@ public class PromptHandler: IPromptHandler
 
         BehaviourModelDto? behaviourModel = BehaviourModelDto.FromString(jsonBuilder.ToString());
         //Todo: advanced validation
-        behaviourModel = null;
         if (behaviourModel == null) throw new InvalidBehaviourModelException();
         yield return behaviourModel;
     }

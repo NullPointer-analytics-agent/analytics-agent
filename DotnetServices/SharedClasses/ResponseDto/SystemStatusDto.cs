@@ -1,9 +1,6 @@
-﻿using System.Text.Json.Serialization;
-
-namespace SharedClasses.ResponseDto;
+﻿namespace SharedClasses.ResponseDto;
 
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SystemStatus
 {
     InvalidLlmName,
