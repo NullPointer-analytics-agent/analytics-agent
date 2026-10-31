@@ -1,4 +1,5 @@
-﻿using Microsoft.SemanticKernel.Connectors.OpenAI;
+﻿using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using SharedClasses.ResponseDto.BehaviourModel;
 
 namespace LlmService;
@@ -7,49 +8,62 @@ public class PromptParameters
 {
     public OpenAIPromptExecutionSettings PromptExecutionSettings => new()
     {
-        ResponseFormat = typeof(BehaviourModelDto),
-        Temperature = 0.1f
+        ResponseFormat = typeof(BehaviourModelDto)
     };
 
-    public string BasicRules { get; } = """
-    ## ЗАДАЧА
-    1. Пользователь опишет явления (состояния) и логическое условие.
-    2. В поле LlmName JSON-ответа укажи название модели (например, "Qwen", "Llama").
-    3. Строго следуй инструкциям из других системных сообщений.
+    public void AddSystemPromptsToHistory(ChatHistory history)
+    {
+        history.AddSystemMessage(GetFullSystemPrompt());
+    }
+
+    public string GetFullSystemPrompt() => $"""
+    {BasicRules}
+    
+    {ReasoningRules}
+    
+    {DefinitionsRules}
+    
+    {InitialStateRules}
+
+    {ExpressionRules}
     """;
 
-    public string DefinitionsRules { get; } = """
-    ## ГЕНЕРАЦИЯ MASSIVE "Definitions"
-    Выдели из блока «Явления» переменные и создай массив объектов по правилам:
-    1. VariableName (string): перевод на английский, строго camelCase (пример: ballSize, floorType). Boolean-переменные начинай с is/has/can (пример: isOnFloor).
-    2. VarType (string): строго одно из "Integer", "Enum", "Boolean".
-    3. Заполнение полей по типам:
-       - "Integer": IntegerMin и IntegerMax — целые числа (если границ нет, строго 0 и 100). EnumValues = null.
-       - "Enum": EnumValues — массив строк на английском в нижнем регистре (пример: ["red", "blue"]). IntegerMin/Max = null.
-       - "Boolean": IntegerMin, IntegerMax, EnumValues строго = null.
+    private string BasicRules => """
+    Пользователь присылает набор состояний и начальное состояние некоторое логическое выражение.
+    Сначала описать резульат естественным языков в Reasoning а потом заполнить строгие поля.
+    Правила заполнения строгих полей указаны ниже.
     """;
 
-    public string ExpressionRules { get; } = """
-    ## ГЕНЕРАЦИЯ ОБЪЕКТА "Expression" (Рекурсивное дерево условий)
-    ### ЖЕСТКИЕ ПРАВИЛА СТРУКТУРЫ:
-    1. КОРНЕМ может быть только оператор (And, Or, Not, Equal).
-    2. Variable и Value — это всегда листья. Могут быть детьми ТОЛЬКО у узла Equal.
-    3. Операторы And, Or, Not ссылаются ТОЛЬКО на другие операторы (Equal, And, Or, Not). Напрямую содержать Variable/Value они НЕ могут.
-    4. Все неиспользуемые в типе узла поля строго = null.
 
-    ### ЗАПОЛНЕНИЕ ПО ТИПАМ УЗЛОВ:
-    1. Type: "Variable" -> Заполни VariableName (из Definitions). Остальные поля = null.
-    2. Type: "Value" -> Заполни объект Value:
-       - Для Integer: {"VariableType": "Integer", "IntegerValue": X, "EnumValue": null, "BooleanVaLue": null}
-       - Для Enum: {"VariableType": "Enum", "IntegerValue": null, "EnumValue": "X", "BooleanVaLue": null}
-       - Для Boolean: {"VariableType": "Boolean", "IntegerValue": null, "EnumValue": null, "BooleanVaLue": true/false}
-       Остальные поля узла = null.
-    3. Type: "Equal" -> Заполни BinaryLeftChild и BinaryRightChild (внутри них строго Variable или Value).
-    4. Type: "And" / "Or" -> Заполни BinaryLeftChild и BinaryRightChild (внутри них Equal, And, Or или Not).
-    5. Type: "Not" -> Заполни UnaryChild (внутри Equal, And, Or или Not).
+    private string ReasoningRules => """
+    Опиши в поле Reasoning подробно (на естественном языке) то что в дальнейшем запишешь в строгий формат
+    """;
 
-    ### СОВМЕСТИМОСТЬ:
-    - Equal сравнивает любые два значения одинакового типа.
-    - And, Or, Not объединяют/инвертируют только Boolean-результаты других операторов.
+    private string DefinitionsRules => """
+    Definitions:
+        string VariableName - имя переменной в PascalCase, у каждой переменной уникальное
+        TypeOfVariable VarType - тип (Integer, Boolean, Enum)
+        int? IntegerMin - нижняя граница для целого числа. Заполняется только если тип Integer, иначе null
+        int? IntegerMax - верхняя граница для целого числа. Заполняется только если тип Integer, иначе null
+        List<string>? EnumValues - набор значений для enum. Заполняется только если тип Enum, иначе null
+    """;
+
+    private string InitialStateRules => """
+    InitialStates:
+        string VariableName - имя переменной к которой относится состояние. Сама переменная должна быть определена в Definitions.
+        int? IntegerValue - Значение для переменной типа Integer. Обязано быть заполнено для Integer (быть зажато в указанном ранее диапазоне Definition), в проитвном случае быть null
+        string? EnumValue - Значение для переменной типа Enum. Обязано быть заполнено для Enum (соответсвовать одному из доступных значений Definition), в проитвном случае быть null
+        bool? BooleanValue - Значение для переменной типа Beolean. Обязано быть заполнено для Boolean, в проитвном случае быть null
+    """;
+
+
+    private string ExpressionRules => """
+    Expression:
+        ExpressionElementType NodeType - тип узла дерева выражения (переменная, конкретное значение или логическая/математическая операция).
+        ExpressionElement? BinaryLeftChild - левый потомок выражения. Заполняется только для бинарных операций (And, Or, Equal, Greater, Less, GreaterOrEqual, LessOrEqual), иначе null.
+        ExpressionElement? BinaryRightChild - правый потомок выражения. Заполняется только для бинарных операций (And, Or, Equal, Greater, Less, GreaterOrEqual, LessOrEqual), иначе null.
+        ExpressionElement? UnaryChild - единственный потомок выражения. Заполняется только для унарных операций (Not), иначе null.
+        string? VariableName - имя переменной. Заполняется только если NodeType равен Variable. Сама переменная обязана быть определена в Definitions. В противном случае null.
+        VariableValue? Value - конкретное значение. Заполняется только если NodeType равен Value. Должно соответствовать правилам заполнения из InitialStates (но без привязки к конкретному VariableName). В противном случае null.
     """;
 }
