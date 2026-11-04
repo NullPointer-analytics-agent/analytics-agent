@@ -319,6 +319,7 @@
     font-size: 17px;
   }
 
+
   .header-actions {
     gap: 6px;
   }
