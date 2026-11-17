@@ -18,6 +18,6 @@ public class BehaviourModelDto: ResponseDtoBase
     public List<VariableState>? InitialStates { get; set; }
     public List<Transition>? Transitions { get; set; }
 
-    //public List<Property>? Properties { get; set; }
+    public List<Property>? Properties { get; set; }
 
 }

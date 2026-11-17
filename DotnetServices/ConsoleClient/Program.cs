@@ -39,7 +39,7 @@ UserRequestDto body = new()
 using HttpRequestMessage request = new()
 {
     Method = HttpMethod.Post,
-    RequestUri = new Uri("http://localhost:5155/api/chat?modelName=gemma"),
+    RequestUri = new Uri("http://localhost:5155/api/chat"),
     Content = JsonContent.Create(body)
 };
 
