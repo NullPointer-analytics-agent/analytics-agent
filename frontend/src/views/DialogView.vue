@@ -1,9 +1,10 @@
-
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 interface Session {
   id: number
@@ -17,72 +18,54 @@ interface Session {
 
 const sessions = ref<Session[]>([])
 
-const userName = computed(
-  () => authStore.user?.name || 'Имя Фамилия'
-)
+const userName = computed(() => authStore.user?.name || 'Имя Фамилия')
 
-const userEmail = computed(
-  () => authStore.user?.email || 'name@mail.ru'
-)
+const userEmail = computed(() => authStore.user?.email || 'name@mail.ru')
 
-const firstName = computed(
-  () => userName.value.split(' ')[0] || 'Имя'
-)
+const firstName = computed(() => userName.value.split(' ')[0] || 'Имя')
 
 const initials = computed(() =>
   userName.value
     .trim()
     .split(/\s+/)
     .slice(0, 2)
-    .map(word => word.charAt(0))
+    .map((word) => word.charAt(0))
     .join('')
-    .toUpperCase()
+    .toUpperCase(),
 )
 
-const todaySessions = computed(() =>
-  sessions.value.filter(session => session.group === 'today')
-)
+const todaySessions = computed(() => sessions.value.filter((session) => session.group === 'today'))
 
 const yesterdaySessions = computed(() =>
-  sessions.value.filter(session => session.group === 'yesterday')
+  sessions.value.filter((session) => session.group === 'yesterday'),
 )
 
 const earlierSessions = computed(() =>
-  sessions.value.filter(session => session.group === 'earlier')
+  sessions.value.filter((session) => session.group === 'earlier'),
 )
+
+function handleLogout() {
+  authStore.logout()
+  router.push('/login')
+}
 </script>
 
 <template>
   <div class="dialog-page">
-
     <aside class="dialog-sidebar">
-
       <div class="sidebar-content">
-        <h1 class="sidebar-logo">
-          Агент-аналитик
-        </h1>
+        <h1 class="sidebar-logo">Агент-аналитик</h1>
         <button type="button" class="new-dialog-button">
           <span class="plus-icon">+</span>
           Новый диалог
         </button>
 
-        <input
-          class="sidebar-search"
-          type="text"
-          placeholder="Поиск по сессиям"
-        />
+        <input class="sidebar-search" type="text" placeholder="Поиск по сессиям" />
 
-        <div
-          v-if="todaySessions.length > 0"
-          class="sidebar-group"
-        >
+        <div v-if="todaySessions.length > 0" class="sidebar-group">
           <p class="sidebar-group-title">СЕГОДНЯ</p>
 
-          <div
-            v-for="session in todaySessions"
-            :key="session.id"
-            class="sidebar-session"
-          >
+          <div v-for="session in todaySessions" :key="session.id" class="sidebar-session">
             <p class="sidebar-session-title">
               {{ session.title }}
             </p>
@@ -93,17 +76,10 @@ const earlierSessions = computed(() =>
           </div>
         </div>
 
-        <div
-          v-if="yesterdaySessions.length > 0"
-          class="sidebar-group"
-        >
+        <div v-if="yesterdaySessions.length > 0" class="sidebar-group">
           <p class="sidebar-group-title">ВЧЕРА</p>
 
-          <div
-            v-for="session in yesterdaySessions"
-            :key="session.id"
-            class="sidebar-session"
-          >
+          <div v-for="session in yesterdaySessions" :key="session.id" class="sidebar-session">
             <p class="sidebar-session-title">
               {{ session.title }}
             </p>
@@ -114,17 +90,10 @@ const earlierSessions = computed(() =>
           </div>
         </div>
 
-        <div
-          v-if="earlierSessions.length > 0"
-          class="sidebar-group"
-        >
+        <div v-if="earlierSessions.length > 0" class="sidebar-group">
           <p class="sidebar-group-title">РАНЕЕ</p>
 
-          <div
-            v-for="session in earlierSessions"
-            :key="session.id"
-            class="sidebar-session"
-          >
+          <div v-for="session in earlierSessions" :key="session.id" class="sidebar-session">
             <p class="sidebar-session-title">
               {{ session.title }}
             </p>
@@ -150,31 +119,21 @@ const earlierSessions = computed(() =>
             {{ userEmail }}
           </p>
         </div>
-
-        <a href="#" class="logout-link" @click.prevent>
-          Выйти
-        </a>
+        <button @click="handleLogout()" class="logout-link">Выйти</button>
       </div>
     </aside>
 
     <main class="dialog-main">
       <div class="dialog-content">
-
         <!-- Приветствие -->
         <header class="dialog-welcome">
-          <h2>
-            Здравствуйте, {{ firstName }}
-          </h2>
+          <h2>Здравствуйте, {{ firstName }}</h2>
 
-          <p>
-            Начните новый диалог или вернитесь к прошлой сессии.
-          </p>
+          <p>Начните новый диалог или вернитесь к прошлой сессии.</p>
         </header>
 
         <section class="new-dialog-card">
-          <label for="dialog-requirements">
-            Новый диалог: опишите требования
-          </label>
+          <label for="dialog-requirements"> Новый диалог: опишите требования </label>
 
           <textarea
             id="dialog-requirements"
@@ -182,26 +141,14 @@ const earlierSessions = computed(() =>
           ></textarea>
 
           <div class="new-dialog-actions">
-            <button
-              type="button"
-              class="start-dialog-button"
-            >
-              Начать диалог
-            </button>
+            <button type="button" class="start-dialog-button">Начать диалог</button>
           </div>
         </section>
 
         <section class="session-history">
           <h3>История сессий</h3>
-          <div
-            v-if="sessions.length > 0"
-            class="history-table"
-          >
-            <div
-              v-for="session in sessions"
-              :key="session.id"
-              class="history-row"
-            >
+          <div v-if="sessions.length > 0" class="history-table">
+            <div v-for="session in sessions" :key="session.id" class="history-row">
               <span class="history-name">
                 {{ session.title }}
               </span>
@@ -210,38 +157,26 @@ const earlierSessions = computed(() =>
                 {{ session.date }}
               </span>
 
-              <span
-                class="history-status"
-                :class="session.status"
-              >
+              <span class="history-status" :class="session.status">
                 {{ session.statusText }}
               </span>
 
-              <button
-                type="button"
-                class="open-session-button"
-              >
-                Открыть
-              </button>
+              <button type="button" class="open-session-button">Открыть</button>
             </div>
           </div>
 
           <div v-else class="empty-history">
             <p>У вас пока нет диалогов</p>
 
-            <span>
-              Начните первый диалог, чтобы он появился здесь.
-            </span>
+            <span> Начните первый диалог, чтобы он появился здесь. </span>
           </div>
         </section>
-
       </div>
     </main>
   </div>
 </template>
 
 <style scoped>
-
 .dialog-page {
   display: flex;
   width: 100%;
@@ -407,11 +342,15 @@ const earlierSessions = computed(() =>
 
 .logout-link {
   flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
   color: #0f806d;
+  font-family: inherit;
   font-size: 13px;
   text-decoration: underline;
+  cursor: pointer;
 }
-
 
 .dialog-main {
   flex: 1;
@@ -587,7 +526,6 @@ const earlierSessions = computed(() =>
   background-color: #f4f6f3;
 }
 
-
 .empty-history {
   padding: 35px 20px;
   border: 1px solid #d5ded8;
@@ -607,7 +545,6 @@ const earlierSessions = computed(() =>
   color: #697670;
   font-size: 14px;
 }
-
 
 @media (max-width: 1100px) {
   .dialog-sidebar {
