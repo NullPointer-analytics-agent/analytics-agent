@@ -1,9 +1,15 @@
 using Microsoft.SemanticKernel;
 using LlmService;
+using LlmService.Exceptions;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder();
 
 builder.Services.AddKernel();
+
+builder.Services.AddSingleton<PromptParameters>();
+builder.Services.AddSingleton<IPromptHandler, PromptHandler>();
+
+builder.Services.AddTransient<ExceptionMiddleware>();
 
 builder.Services.AddOpenAIChatCompletion(
 
@@ -20,7 +26,13 @@ builder.Services.AddOpenAIChatCompletion(
     serviceId: "gemma"
 );
 
+builder.Services.AddSingleton<PromptParameters>();
+
+
 WebApplication app = builder.Build();
+
+
+app.UseMiddleware<ExceptionMiddleware>();
 
 app.MapLLMChatEndpoints();
 

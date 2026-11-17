@@ -1,65 +1,26 @@
 ﻿using SharedClasses;
 using SharedClasses.ResponseDto;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 
-string prompt = """
-System: Твоя задача — проанализировать запрос пользователя и сформировать переменные состояния.
-Доступны 3 типа: Integer, Enum, Boolean.
-Поле 'EnumValues' заполняется ТОЛЬКО если VarType == 'Enum'. Для Integer и Boolean поле 'EnumValues' должно быть null.
-В поле LlmName укажи свое имя.
-
-КРИТЕРИИ ВАЛИДНОСТИ:
-Запрос ВАЛИДЕН, если пользователь описывает список состояний (явлений) И их начальную конфигурацию. 
-Запрос НЕВАЛИДЕН, если он не по теме (например, просьба посчитать, рассказать фильм) или в нем не хватает данных.
-
-ПРАВИЛА ФОРМИРОВАНИЯ И ВЫВОДА JSON:
-Выводи ответ СТРОГО в формате JSON. Структура зависит от валидности запроса:
-
-ЕСЛИ ЗАПРОС ВАЛИДЕН:
-{
-  "LlmName": "Имя_Модели",
-  "IsValidPrompt": true,
-  "ReasonIfInvalid": "",
-  "Definitions": [ /* список определений переменных */ ],
-  "Values": [ /* список текущих значений */ ]
-}
-
-ЕСЛИ ЗАПРОС НЕВАЛИДЕН:
-{
-  "LlmName": "Имя_Модели",
-  "IsValidPrompt": false,
-  "ReasonIfInvalid": "Конкретная причина, почему запрос невалиден (на русском языке)",
-  "Definitions": [],
-  "Values": []
-}
-
-User:
-    Явления:
-        Скорость машины от 0 до 90.
-        Погода на улице (ясно, облачно, дождь).
-        Светло ли на улице.
-
-    Начальное состояние:
-        Машина едет со скоростью 78 км/ч в дождь ночью.
+string userPrompt = """
+Сделай модель для умного климат-контроля. Режимы работы системы: Выключен, Обогрев, Охлаждение. Целевая температура задается в строгом диапазоне от 16 до 30 градусов. Также есть датчик открытого окна (включен или выключен).
+По умолчанию система выключена, целевая температура установлена на 20, окно закрыто.
+Важное правило безопасности: если окно открыто, система физически не может находиться в режимах Обогрева или Охлаждения. Мы хотим быть уверены, что при нормальных условиях можно перевести систему в режим Обогрева. Также проверь, нет ли в системе тупиковых состояний (например, если окно открыто, у нас всё равно должна быть возможность выключить систему или закрыть окно, чтобы не зависнуть навсегда).
 """;
-
-
-
-
-
 
 
 
 UserRequestDto body = new()
 {
-    Prompt = prompt
+    Prompt = userPrompt
 };
 
 
 using HttpRequestMessage request = new()
 {
     Method = HttpMethod.Post,
-    RequestUri = new Uri("http://localhost:5155/api/chat/test"),
+    RequestUri = new Uri("http://localhost:5155/api/chat"),
     Content = JsonContent.Create(body)
 };
 
@@ -82,5 +43,12 @@ while (true)
 
     ResponseDtoBase? responsePart = ResponseDtoBase.FromString(line);
 
-    Console.WriteLine(responsePart?.SerializeMultiLine() ?? "Error: response part is null");
+    if(responsePart is ChunkDto chunk)
+    {
+        string text = Regex.Unescape(chunk.ChunkText);
+
+        Console.Write(text);
+    }
+    else
+        Console.WriteLine(responsePart?.SerializeMultiLine() ?? "Error: response part is null");
 }
