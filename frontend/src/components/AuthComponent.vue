@@ -1,27 +1,25 @@
+<script setup lang="ts">
+defineProps<{
+  mode: 'register' | 'login'
+}>()
+</script>
+
 <template>
   <aside class="auth-panel">
     <div class="auth-header">
       <h2 class="auth-title">Агент-аналитик</h2>
-      <button type="button" class="auth-close" @click="$router.push('/')">✕</button>
+
+      <button type="button" class="auth-close" aria-label="Закрыть" @click="$router.push('/')">
+        ✕
+      </button>
     </div>
+
     <div class="auth-tabs">
-      <RouterLink
-        type="button"
-        to="/register"
-        class="auth-tab"
-        :class="{ active: mode === 'register' }"
-        @click="mode = 'register'"
-      >
+      <RouterLink to="/register" class="auth-tab" :class="{ active: mode === 'register' }">
         Регистрация
       </RouterLink>
 
-      <RouterLink
-        type="button"
-        to="/login"
-        class="auth-tab"
-        :class="{ active: mode === 'login' }"
-        @click="mode = 'login'"
-      >
+      <RouterLink to="/login" class="auth-tab" :class="{ active: mode === 'login' }">
         Вход
       </RouterLink>
     </div>
@@ -40,15 +38,13 @@
 
     <nav class="auth-menu">
       <ul>
-        <li><a href="#">Как это работает</a></li>
-        <li><a href="#">Примеры требований</a></li>
+        <li>
+          <a href="#">Как это работает</a>
+        </li>
+        <li>
+          <a href="#">Примеры требований</a>
+        </li>
       </ul>
     </nav>
   </aside>
 </template>
-
-<script setup lang="ts">
-defineProps<{
-  mode: 'register' | 'login'
-}>()
-</script>
