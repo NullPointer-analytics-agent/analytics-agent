@@ -64,6 +64,13 @@ export DATABASE_URL="postgres://auth_user:auth_local_dev_password@127.0.0.1:5433
 export JWT_SECRET="$(openssl rand -hex 32)"
 ```
 
+Windows
+
+```
+set DATABASE_URL=postgres://auth_user:auth_local_dev_password@127.0.0.1:5433/auth_db?sslmode=disable
+set JWT_SECRET=что-то
+```
+
 ### 4. Запустить сервер
 
 ```bash

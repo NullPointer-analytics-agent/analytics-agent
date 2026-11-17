@@ -40,7 +40,6 @@
 
     <nav class="auth-menu">
       <ul>
-        <li><a href="#">Главная</a></li>
         <li><a href="#">Как это работает</a></li>
         <li><a href="#">Примеры требований</a></li>
       </ul>
