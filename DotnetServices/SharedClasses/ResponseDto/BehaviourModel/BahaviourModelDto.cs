@@ -11,12 +11,13 @@ public class BehaviourModelDto: ResponseDtoBase
     }
 
 
-    public string LlmName { get; set; } = string.Empty;
     public bool IsValidPrompt { get; set; }
     public string? ReasonIfInvalid { get; set; }
 
     public List<VariableDefinition>? Definitions { get; set; }
     public List<VariableState>? InitialStates { get; set; }
-    public ExpressionTreeNode? ExpressionRoot { get; set; }
+    public List<Transition>? Transitions { get; set; }
+
+    //public List<Property>? Properties { get; set; }
 
 }

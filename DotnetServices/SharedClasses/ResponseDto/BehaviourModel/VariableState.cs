@@ -3,9 +3,9 @@
 
 public class VariableState
 {
-    public string VariableName { get; set; } = string.Empty;
+    public string ReferencedVariableName { get; set; } = string.Empty;
+    public VariableType ReferencedVariableType { get; set; }
     public int? IntegerValue { get; set; }
     public string? EnumValue { get; set; }
     public bool? BooleanValue { get; set; }
 }
-

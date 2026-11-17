@@ -4,16 +4,14 @@ public class ExpressionTreeNode
 {
     public enum ExpressionTreeNodeType
     {
-        Logic_BinaryOperator_And,
-        Logic_BinaryOperator_Or,
-        Logic_UnaryOperator_Not,
-        Compare_BinaryOperator_Equals,
-        Compare_BinaryOperator_More,
-        Compare_BinaryOperator_Less,
+        LogicOperator_BinaryOperator_And,
+        LogicOperator_BinaryOperator_Or,
+        LogicOperator_UnaryOperator_Not,
+        CompareOperator_BinaryOperator_Equals,
+        CompareOperator_BinaryOperator_More,
+        CompareOperator_BinaryOperator_Less,
         Operand_VariableReference,
-        Operand_ConstantValue_Enum,
-        Operand_ConstantValue_Integer,
-        Operand_ConstantValue_Boolean
+        Operand_ConstantValue
     }
 
     public ExpressionTreeNodeType NodeType { get; set; }
@@ -21,6 +19,8 @@ public class ExpressionTreeNode
     public ExpressionTreeNode? LeftChild { get; set; }
     public ExpressionTreeNode? RightChild { get; set; }
     public ExpressionTreeNode? UnaryChild { get; set; }
+
+
 
     public string? ReferencedVariableName { get; set; }
 

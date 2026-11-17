@@ -1,4 +1,4 @@
-﻿public enum TypeOfVariable
+﻿public enum VariableType
 {
     Integer, Enum, Boolean
 }

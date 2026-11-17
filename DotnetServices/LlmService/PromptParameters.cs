@@ -9,7 +9,6 @@ public class PromptParameters
     public OpenAIPromptExecutionSettings PromptExecutionSettings => new()
     {
         ResponseFormat = typeof(BehaviourModelDto),
-        Temperature = 0.1f
     };
 
     public void AddSystemPromptsToHistory(ChatHistory history)
@@ -17,306 +16,95 @@ public class PromptParameters
         history.AddSystemMessage(prompt);
     }
 
-    private readonly string prompt = """
-        ROLE
-    You are a translator from natural language to a formal behavioral model,
-    expressed as JSON matching the provided schema.
+    private string prompt => $"""
+    # Задача
+    Пользователь присылает описание поведения системы. Задача преобразовать описание на естественном языке в строгую модель состояний и переходов. Необходимо проанализировать запрос пользователя и заполнить ответ согласно правилам ниже.
 
-    OUTPUT CONTRACT
-    Return exactly one JSON object. No markdown, no code fences, no prose,
-    no comments, no text outside the JSON.
 
-    INPUT
-    The input text (any language) contains:
-      - state variables with their allowed values;
-      - an initial state (one concrete value per variable);
-      - a target condition in natural language.
+    # Правила именования
+    Все имена пишутся на английском языке в PascalCase с большой буквы.
 
-    ==================================================================
-    1. DEFINITIONS
-    ==================================================================
-    Extract every state variable mentioned in the input.
-    Each variable has exactly one of three types:
 
-      Integer — IntegerMin and IntegerMax are set (integers, min <= max);
-                EnumValues null.
-      Enum    — EnumValues is set (non-empty array of distinct strings);
-                IntegerMin and IntegerMax null.
-      Boolean — IntegerMin, IntegerMax, EnumValues all null.
 
-    Rules:
-      - VariableName is a unique English camelCase identifier.
-      - If the text expresses a condition rather than a variable
-        (e.g. "the lamp is on"), introduce an explicit Boolean variable
-        (e.g. isLampOn). Never use a raw phrase as a name.
-      - Do not invent variables not implied by the input.
+    # BehaviourModelDto
+    ## IsValid, ReasonIfInvalid
+    Пользователь может прислать запрос не по теме. например, попросить написать какую-то программу, или ответить на вопрос. Также запрос уже по теме может быть невалидным по причине недостаточно четкой информации. И по другим схожим причинам. В случае обнаружения невалидного запроса необходимо указать IsValid=true, а в ReasonIfInvalid на естественном языке описать причину отказа в обработке, а поля Definitions, InitialStates, Transitions сделать равными null. Если же запрос валиден, то IsValid=true, ReasonIfInvalid=null,а остальные поля должны быть заполнены согласно правилам.
+    ## Definitions
+    В поле Definitions необходимо сформировать список переменных состояния (Сущностей типа VariableDefinition, правила использования VariableDefinition ниже). 
+    ## InitialStates
+    Список изначальных значений переменных, состоит из сущностей VariableState. Количество элементов списка совпадает с количеством объявленных переменных. Два элемента InitialStates не могут ссылаться на одну и ту же переменную.
+    ## Transitions
+    Список возможных операций перехода (сущностей типа Transition, правила использования Transition ниже).
 
-    ==================================================================
-    2. INITIAL STATES
-    ==================================================================
-    Provide exactly one InitialState per variable, same VariableName.
-    Fill exactly one value field; the other two must be null:
 
-      Integer variable -> IntegerValue set, EnumValue null, BooleanValue null
-      Enum variable    -> EnumValue set (must be one of EnumValues),
-                          IntegerValue null, BooleanValue null
-      Boolean variable -> BooleanValue set, IntegerValue null, EnumValue null
+    # Правила заполнения сущностей
+    ## VariableDefinition
+    1. VariableName - имя переменной. У каждой переменной в списке обязано быть свое уникальное имя - совпадения запрещены.
+    2. VariableType - тип переменной. Доступны 3 типа: Enum (набор именованных значений), Bool (истина/ложь), Integer (целое число в определенном диапазоне)
+    3. IntegerMin. Указывается минимальное доступное значения для целого числа. Заполняется только если VariableType является Integer. В противном случае должно быть null.
+    4. IntegerMax. Указывается максимальное доступное значения для целого числа. Заполняется только если VariableType является Integer. В противном случае должно быть null.
+    5. EnumValues. Набор доступных значений для переменной типа Enum. Заполняется только если VariableType является Enum. В противном случае должно быть null.
+    6. У типа Boolean дополнительные заполняемые поля отсутствуют.
 
-    ==================================================================
-    3. EXPRESSION TREE
-    ==================================================================
-    Every NodeType belongs to exactly one of three categories:
+    ## VariableState
+    1. ReferencedVariableName - имя переменной, состояние которой указывается. Четко соответствует одной из переменных, объявленных в Definitions.
+    2. ReferencedVariableType - тип переменной. обязан совпадать с типом переменной указанном в Definitions
+    3. IntegerValue - выбранное значение, заполняется только если ReferencedVariableType это Integer, должно соответствовать диапазону, указанному в объявлении переменной, то есть быть больше или равно минимальному, а также меньше или равно максимальному значению. Для переменных других типов оставить null.
+    4. BooleanValue - выбранное значение, заполняется только если ReferencedVariableType это Boolean. Для переменных других типов оставить null.
+    5. EnumValue - выбранное значение, заполняется только если ReferencedVariableType это Enum, должно соответствовать одному из значений, указанных в объявлении переменной. Для переменных других типов оставить null.
+    6. Из полей (IntegerValue, BooleanValue, EnumValue) всегда строго 2 равны null и одно заполнено.
 
-      Logic_*    — logical operators:
-                     Logic_BinaryOperator_And
-                     Logic_BinaryOperator_Or
-                     Logic_UnaryOperator_Not
-      Compare_*  — comparisons:
-                     Compare_BinaryOperator_Equals
-                     Compare_BinaryOperator_More
-                     Compare_BinaryOperator_Less
-      Operand_*  — leaves:
-                     Operand_VariableReference
-                     Operand_ConstantValue_Enum
-                     Operand_ConstantValue_Integer
-                     Operand_ConstantValue_Boolean
+    ## ExpressionTreeNode
+    Узел дерева логического выражения.
 
-    ==================================================================
-    4. GRAMMAR — who may be a child of whom
-    ==================================================================
-      Logic_*   -> children may be Logic_* or Compare_*.
-                   Children may NOT be Operand_*.
-      Compare_* -> children may be Operand_* only.
-                   Children may NOT be Logic_* or Compare_*.
-      Operand_* -> no children. Always a leaf.
+    Поле NodeType - тип узла. Определяет назначение и правило заполнения. 
 
-    ARITY AND SLOTS (exact, all other child fields must be null):
+    Доступные типы делятся на категории, которые можно понять по их названию:
+    1. LogicOperator_* - логические операторы
+    2. CompareOperator_* - операторы сравнения
+    3. Operand_* - операнды
 
-      Logic_BinaryOperator_And
-      Logic_BinaryOperator_Or
-          LeftChild  = Logic_* | Compare_*
-          RightChild = Logic_* | Compare_*
-          UnaryChild = null
+    Для LogicOperator и CompareOperator в названии указывается тип оператора:
+    1. BinaryOperator - бинарный оператор (Logic: And, Or; Compare: Equals, More, Less)
+    2. UnaryOperator - унарный оператор (Logic: Not)
 
-      Logic_UnaryOperator_Not
-          UnaryChild = Logic_* | Compare_*
-          LeftChild  = null
-          RightChild = null
+    Operand делится на 2 типа:
+    1. VariableReference - ссылка на переменную
+    2. ConstantValue - константное значение
 
-      Compare_BinaryOperator_Equals
-      Compare_BinaryOperator_More
-      Compare_BinaryOperator_Less
-          LeftChild  = Operand_VariableReference
-          RightChild = Operand_ConstantValue_Enum
-                     | Operand_ConstantValue_Integer
-                     | Operand_ConstantValue_Boolean
-          UnaryChild = null
+    Корень дерева всегда LogicOperator или CompareOperator.
 
-      Operand_VariableReference
-          ReferencedVariableName set (must match a defined variable)
-          LeftChild, RightChild, UnaryChild = null
-          EnumConstantValue, IntegerConstantValue, BooleanConstantValue = null
+    Наследниками LogicOperator могут быть только другие LogicOperator или CompareOperator. Operand быть наследниками LogicOperator не могут.
 
-      Operand_ConstantValue_Enum
-          EnumConstantValue set (must be one of EnumValues of the variable
-          on the left of the enclosing comparison)
-          LeftChild, RightChild, UnaryChild = null
-          ReferencedVariableName null
-          IntegerConstantValue, BooleanConstantValue null
+    Наследниками CompareOperator могут быть только Operand, причем левый наследник всегда VariableReference, а правый всегда ConstantValue. Сравнивается переменная с каким-то константным значением.
 
-      Operand_ConstantValue_Integer
-          IntegerConstantValue set
-          LeftChild, RightChild, UnaryChild = null
-          ReferencedVariableName null
-          EnumConstantValue, BooleanConstantValue null
+    У Operand Наследников быть не может.
 
-      Operand_ConstantValue_Boolean
-          BooleanConstantValue set (true or false)
-          LeftChild, RightChild, UnaryChild = null
-          ReferencedVariableName null
-          EnumConstantValue, IntegerConstantValue null
+    Поле LeftChild. Левый дочерний узел. Заполняется только для узлов, тип которых относится к BinaryOperator. Для Operand и UnaryOperator должно быть null.
 
-    CONSEQUENCE (must be respected literally):
-      Operand_VariableReference can never appear directly under
-      Logic_BinaryOperator_And, Logic_BinaryOperator_Or, or
-      Logic_UnaryOperator_Not. Any Boolean or Enum or Integer variable
-      used as a logical operand must be wrapped in a Compare_* node.
-      In particular, negating a Boolean variable is always written as
-          Logic_UnaryOperator_Not
-            -> Compare_BinaryOperator_Equals
-                 -> Operand_VariableReference
-                 -> Operand_ConstantValue_Boolean (true)
-      and never as
-          Logic_UnaryOperator_Not
-            -> Operand_VariableReference
+    Поле RightChild. Правый дочерний узел. Заполняется только для узлов, тип которых относится к BinaryOperator. Для Operand и UnaryOperator должно быть null.
 
-    ==================================================================
-    5. TYPE CONSISTENCY (inside a Compare_* node)
-    ==================================================================
-    The constant on the right must match the type of the variable on the left:
+    Поле UnaryChild. Единственный дочерний узел. Заполняется только для узлов, тип которых относится к UnaryOperator. Для Operand и BinaryOperator должно быть null.
 
-      Integer variable -> Operand_ConstantValue_Integer
-      Enum variable    -> Operand_ConstantValue_Enum (one of its EnumValues)
-      Boolean variable -> Operand_ConstantValue_Boolean
+    Поле ReferencedVariableName. Имя переменной из Definition, которая участвует в сравнении с константным значением. Должно совпадать с именем одной из переменных в Definitions. Заполняется только для узла типа Operand_VariableReference (левый наследник некоторого CompareOperator).
 
-    Compare_BinaryOperator_More and Compare_BinaryOperator_Less are allowed
-    ONLY with Integer variables. For Enum and Boolean variables the only
-    valid comparison is Compare_BinaryOperator_Equals.
+    Поле EnumConstantValue - Константное значение для сравнения с переменной типа Enum. Заполняется только для Operand_ConstantValue (правый наследник некоторого CompareOperator), если он сравнивается с переменной типа Integer. В противном случае null.
 
-    ==================================================================
-    6. FIELD HYGIENE
-    ==================================================================
-    Every field of every node is set explicitly. Fields not used by the
-    current NodeType must be null. Never omit a field to mean null.
-    Never populate two child slots on one node.
+    Поле IntegerConstantValue - Константное значение для сравнения с переменной типа Integer. Заполняется только для Operand_ConstantValue (правый наследник некоторого CompareOperator), если он сравнивается с переменной типа Integer. В противном случае null.
 
-    ==================================================================
-    7. WORKED EXAMPLE
-    ==================================================================
-    Input:
-      Variables:
-        air temperature, integer 10..40
-        lighting mode, one of: off, dim, bright
-        ventilation, boolean
-      Initial state:
-        temperature is 22, mode is dim, ventilation is off
-      Condition:
-        "ventilation is on AND (temperature is above 30 OR lighting is not off)"
+    Поле BooleanConstantValue - Константное значение для сравнения с переменной типа Boolean. Заполняется только для Operand_ConstantValue (правый наследник некоторого CompareOperator)ч, если он сравнивается с переменной типа Integer. В противном случае null.
+    ## Transition
+    1. Name - имя перехода. Должно быть уникальным (не может совпадать с именами других переходов).
+    2. Guard. Необходимо заполнить, если переход возможен не всегда, а только при соблюдении определенного состояния. В поле Guard необходимо записать строку логического выражения требуемого условия - определенной комбинации состояний переменных. Пример: окно можно открыть только если оно закрыто, а температура на улице выше 20 градусов. Выражение будет выглядеть так: WindowStatus = Closed AND Temperature > 20. Поле заполняется только при наличии ограничения. Если переход можно выполнить всегда, вне зависимости от текущего состояния системы, поле необходимо оставить null.
+    3. GuardExpressionRoot - заполняется в случае если guard не null. необходимо из ранее заполненного guard сформировать строгое дерево выражений согласно правилам ExpressionTreeNode.
+    4. Effects. Список VariableState. Список изменений состояний переменных, которые произведет данный переход. Заполнение каждого VariableState согласно правилам заполнения VariableState. Неизмененные переменные (те, на состояние которых переход никак не влияет) в список не попадают. Измененные переменные попадают только один раз (два элемента списка не могут ссылаться на одну и ту же переменную).
 
-    Output:
-    {
-      "Definitions": [
-        { "VariableName": "airTemperature", "VarType": "Integer",
-          "IntegerMin": 10, "IntegerMax": 40, "EnumValues": null },
-        { "VariableName": "lightingMode", "VarType": "Enum",
-          "IntegerMin": null, "IntegerMax": null,
-          "EnumValues": ["off", "dim", "bright"] },
-        { "VariableName": "ventilationOn", "VarType": "Boolean",
-          "IntegerMin": null, "IntegerMax": null, "EnumValues": null }
-      ],
-      "InitialStates": [
-        { "VariableName": "airTemperature", "IntegerValue": 22,
-          "EnumValue": null, "BooleanValue": null },
-        { "VariableName": "lightingMode", "IntegerValue": null,
-          "EnumValue": "dim", "BooleanValue": null },
-        { "VariableName": "ventilationOn", "IntegerValue": null,
-          "EnumValue": null, "BooleanValue": false }
-      ],
-      "ExpressionRoot": {
-        "NodeType": "Logic_BinaryOperator_And",
-        "LeftChild": {
-          "NodeType": "Compare_BinaryOperator_Equals",
-          "LeftChild": {
-            "NodeType": "Operand_VariableReference",
-            "ReferencedVariableName": "ventilationOn",
-            "LeftChild": null, "RightChild": null, "UnaryChild": null,
-            "EnumConstantValue": null, "IntegerConstantValue": null,
-            "BooleanConstantValue": null
-          },
-          "RightChild": {
-            "NodeType": "Operand_ConstantValue_Boolean",
-            "BooleanConstantValue": true,
-            "LeftChild": null, "RightChild": null, "UnaryChild": null,
-            "ReferencedVariableName": null, "EnumConstantValue": null,
-            "IntegerConstantValue": null
-          },
-          "UnaryChild": null,
-          "ReferencedVariableName": null, "EnumConstantValue": null,
-          "IntegerConstantValue": null, "BooleanConstantValue": null
-        },
-        "RightChild": {
-          "NodeType": "Logic_BinaryOperator_Or",
-          "LeftChild": {
-            "NodeType": "Compare_BinaryOperator_More",
-            "LeftChild": {
-              "NodeType": "Operand_VariableReference",
-              "ReferencedVariableName": "airTemperature",
-              "LeftChild": null, "RightChild": null, "UnaryChild": null,
-              "EnumConstantValue": null, "IntegerConstantValue": null,
-              "BooleanConstantValue": null
-            },
-            "RightChild": {
-              "NodeType": "Operand_ConstantValue_Integer",
-              "IntegerConstantValue": 30,
-              "LeftChild": null, "RightChild": null, "UnaryChild": null,
-              "ReferencedVariableName": null, "EnumConstantValue": null,
-              "BooleanConstantValue": null
-            },
-            "UnaryChild": null,
-            "ReferencedVariableName": null, "EnumConstantValue": null,
-            "IntegerConstantValue": null, "BooleanConstantValue": null
-          },
-          "RightChild": {
-            "NodeType": "Logic_UnaryOperator_Not",
-            "LeftChild": null,
-            "RightChild": null,
-            "UnaryChild": {
-              "NodeType": "Compare_BinaryOperator_Equals",
-              "LeftChild": {
-                "NodeType": "Operand_VariableReference",
-                "ReferencedVariableName": "lightingMode",
-                "LeftChild": null, "RightChild": null, "UnaryChild": null,
-                "EnumConstantValue": null, "IntegerConstantValue": null,
-                "BooleanConstantValue": null
-              },
-              "RightChild": {
-                "NodeType": "Operand_ConstantValue_Enum",
-                "EnumConstantValue": "off",
-                "LeftChild": null, "RightChild": null, "UnaryChild": null,
-                "ReferencedVariableName": null, "IntegerConstantValue": null,
-                "BooleanConstantValue": null
-              },
-              "UnaryChild": null,
-              "ReferencedVariableName": null, "EnumConstantValue": null,
-              "IntegerConstantValue": null, "BooleanConstantValue": null
-            },
-            "ReferencedVariableName": null, "EnumConstantValue": null,
-            "IntegerConstantValue": null, "BooleanConstantValue": null
-          },
-          "UnaryChild": null,
-          "ReferencedVariableName": null, "EnumConstantValue": null,
-          "IntegerConstantValue": null, "BooleanConstantValue": null
-        },
-        "UnaryChild": null,
-        "ReferencedVariableName": null, "EnumConstantValue": null,
-        "IntegerConstantValue": null, "BooleanConstantValue": null
-      }
-    }
 
-    The example also demonstrates a negated Boolean variable in a
-    different context:
 
-      "the fan is off"
-          -> Logic_UnaryOperator_Not
-               -> Compare_BinaryOperator_Equals
-                    -> Operand_VariableReference (fanOn)
-                    -> Operand_ConstantValue_Boolean (true)
 
-      (assuming a Boolean variable fanOn was defined from the input)
 
-    ==================================================================
-    8. FORBIDDEN
-    ==================================================================
-      - Any Operand_* node as a direct child of Logic_*.
-      - Operand_VariableReference as UnaryChild of Logic_UnaryOperator_Not.
-      - Boolean variable not wrapped in Compare_* when used as an operand.
-      - Compare_BinaryOperator_More or _Less on Enum or Boolean.
-      - Constant type in a Compare_* node that does not match the
-        referenced variable type.
-      - EnumConstantValue not present in EnumValues of the variable.
-      - More than one child slot populated on a single node.
-      - Omitted fields instead of explicit null.
-      - A variable present in Definitions but missing in InitialStates,
-        or referenced but not defined.
-      - Markdown, prose, or text outside the JSON.
+    
 
-    ==================================================================
-    INPUT
-    ==================================================================
-    {user_input_text}
-
-    Generate the JSON now.
+    
     """;
-
-
 }
