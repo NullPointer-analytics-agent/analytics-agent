@@ -1,73 +1,118 @@
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
-
 interface Session {
   id: number
   title: string
   description: string
   date: string
+  createdAt: string
+  requirements: string
   status: 'error' | 'success' | 'warning'
   statusText: string
-  group: 'today' | 'yesterday' | 'earlier'
 }
 
-const sessions = ref<Session[]>([])
+const storageKey = computed(() => `analytics-agent-sessions-${authStore.user?.id ?? 'guest'}`)
+function loadSessions(): Session[] {
+  try {
+    const saved = localStorage.getItem(storageKey.value)
+    const parsed: unknown = saved ? JSON.parse(saved) : []
+    return Array.isArray(parsed) ? parsed.filter((item): item is Session =>
+      item !== null && typeof item === 'object' &&
+      typeof item.id === 'number' && typeof item.requirements === 'string' &&
+      typeof item.createdAt === 'string' && typeof item.title === 'string'
+    ) : []
+  } catch { return [] }
+}
+const sessions = ref<Session[]>(loadSessions())
+const sidebarOpen = ref(true)
+const searchQuery = ref('')
+const requirements = ref('')
+const activeSessionId = ref<number | null>(null)
+const userName = computed(() => authStore.user?.name || 'Имя Фамилия')
+const userEmail = computed(() => authStore.user?.email || 'name@mail.ru')
+const firstName = computed(() => userName.value.split(' ')[0] || 'Имя')
+const initials = computed(() => userName.value.trim().split(/\s+/).slice(0, 2).map(word => word.charAt(0)).join('').toUpperCase())
 
-const userName = computed(
-  () => authStore.user?.name || 'Имя Фамилия'
-)
+watch(sessions, value => {
+  try { localStorage.setItem(storageKey.value, JSON.stringify(value)) } catch { /* Storage unavailable */ }
+}, { deep: true })
+watch(storageKey, () => {
+  sessions.value = loadSessions()
+  activeSessionId.value = null
+  requirements.value = ''
+})
 
-const userEmail = computed(
-  () => authStore.user?.email || 'name@mail.ru'
-)
+const filteredSessions = computed(() => sessions.value.filter(session =>
+  `${session.title} ${session.description} ${session.requirements}`.toLowerCase().includes(searchQuery.value.toLowerCase().trim())
+))
+function groupFor(session: Session): 'today' | 'yesterday' | 'earlier' {
+  const date = new Date(session.createdAt)
+  const now = new Date()
+  if (date.toDateString() === now.toDateString()) return 'today'
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) return 'yesterday'
+  return 'earlier'
+}
+const todaySessions = computed(() => filteredSessions.value.filter(s => groupFor(s) === 'today'))
+const yesterdaySessions = computed(() => filteredSessions.value.filter(s => groupFor(s) === 'yesterday'))
+const earlierSessions = computed(() => filteredSessions.value.filter(s => groupFor(s) === 'earlier'))
 
-const firstName = computed(
-  () => userName.value.split(' ')[0] || 'Имя'
-)
-
-const initials = computed(() =>
-  userName.value
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map(word => word.charAt(0))
-    .join('')
-    .toUpperCase()
-)
-
-const todaySessions = computed(() =>
-  sessions.value.filter(session => session.group === 'today')
-)
-
-const yesterdaySessions = computed(() =>
-  sessions.value.filter(session => session.group === 'yesterday')
-)
-
-const earlierSessions = computed(() =>
-  sessions.value.filter(session => session.group === 'earlier')
-)
+function newDialog() {
+  activeSessionId.value = null
+  requirements.value = ''
+}
+function startDialog() {
+  const value = requirements.value.trim()
+  if (!value) return
+  const now = new Date()
+  const session: Session = {
+    id: now.getTime(),
+    title: value.length > 45 ? `${value.slice(0, 45)}…` : value,
+    description: value.length > 85 ? `${value.slice(0, 85)}…` : value,
+    requirements: value,
+    date: now.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    createdAt: now.toISOString(),
+    status: 'warning',
+    statusText: 'Черновик'
+  }
+  sessions.value.unshift(session)
+  activeSessionId.value = session.id
+}
+function openSession(session: Session) {
+  activeSessionId.value = session.id
+  requirements.value = session.requirements
+}
+function saveChanges() {
+  const session = sessions.value.find(s => s.id === activeSessionId.value)
+  if (!session || !requirements.value.trim()) return
+  const value = requirements.value.trim()
+  session.requirements = value
+  session.title = value.length > 45 ? `${value.slice(0, 45)}…` : value
+  session.description = value.length > 85 ? `${value.slice(0, 85)}…` : value
+}
 </script>
 
 <template>
-  <div class="dialog-page">
+  <div class="dialog-page" :class="{ 'sidebar-collapsed': !sidebarOpen }">
 
-    <aside class="dialog-sidebar">
+    <aside class="dialog-sidebar" :class="{ collapsed: !sidebarOpen }">
 
       <div class="sidebar-content">
+        <button type="button" class="sidebar-close" aria-label="Свернуть историю" @click="sidebarOpen = false">‹</button>
         <h1 class="sidebar-logo">
           Агент-аналитик
         </h1>
-        <button type="button" class="new-dialog-button">
+        <button type="button" class="new-dialog-button" @click="newDialog">
           <span class="plus-icon">+</span>
           Новый диалог
         </button>
 
         <input
-          class="sidebar-search"
+          class="sidebar-search" v-model="searchQuery"
           type="text"
           placeholder="Поиск по сессиям"
         />
@@ -81,7 +126,7 @@ const earlierSessions = computed(() =>
           <div
             v-for="session in todaySessions"
             :key="session.id"
-            class="sidebar-session"
+            class="sidebar-session" :class="{ selected: activeSessionId === session.id }" @click="openSession(session)"
           >
             <p class="sidebar-session-title">
               {{ session.title }}
@@ -102,7 +147,7 @@ const earlierSessions = computed(() =>
           <div
             v-for="session in yesterdaySessions"
             :key="session.id"
-            class="sidebar-session"
+            class="sidebar-session" :class="{ selected: activeSessionId === session.id }" @click="openSession(session)"
           >
             <p class="sidebar-session-title">
               {{ session.title }}
@@ -123,7 +168,7 @@ const earlierSessions = computed(() =>
           <div
             v-for="session in earlierSessions"
             :key="session.id"
-            class="sidebar-session"
+            class="sidebar-session" :class="{ selected: activeSessionId === session.id }" @click="openSession(session)"
           >
             <p class="sidebar-session-title">
               {{ session.title }}
@@ -158,6 +203,7 @@ const earlierSessions = computed(() =>
     </aside>
 
     <main class="dialog-main">
+      <button type="button" class="sidebar-toggle" :aria-label="sidebarOpen ? 'Свернуть историю' : 'Открыть историю'" @click="sidebarOpen = !sidebarOpen">{{ sidebarOpen ? '‹' : '☰' }}</button>
       <div class="dialog-content">
 
         <!-- Приветствие -->
@@ -178,15 +224,16 @@ const earlierSessions = computed(() =>
 
           <textarea
             id="dialog-requirements"
+            v-model="requirements"
             placeholder="Опишите правила системы обычным текстом..."
           ></textarea>
 
           <div class="new-dialog-actions">
             <button
               type="button"
-              class="start-dialog-button"
+              class="start-dialog-button" :disabled="!requirements.trim()" @click="activeSessionId === null ? startDialog() : saveChanges()"
             >
-              Начать диалог
+              {{ activeSessionId === null ? 'Начать диалог' : 'Сохранить изменения' }}
             </button>
           </div>
         </section>
@@ -194,11 +241,11 @@ const earlierSessions = computed(() =>
         <section class="session-history">
           <h3>История сессий</h3>
           <div
-            v-if="sessions.length > 0"
+            v-if="filteredSessions.length > 0"
             class="history-table"
           >
             <div
-              v-for="session in sessions"
+              v-for="session in filteredSessions"
               :key="session.id"
               class="history-row"
             >
@@ -219,7 +266,7 @@ const earlierSessions = computed(() =>
 
               <button
                 type="button"
-                class="open-session-button"
+                class="open-session-button" @click="openSession(session)"
               >
                 Открыть
               </button>
@@ -227,10 +274,10 @@ const earlierSessions = computed(() =>
           </div>
 
           <div v-else class="empty-history">
-            <p>У вас пока нет диалогов</p>
+            <p>{{ sessions.length ? 'Ничего не найдено' : 'У вас пока нет диалогов' }}</p>
 
             <span>
-              Начните первый диалог, чтобы он появился здесь.
+              {{ sessions.length ? 'Попробуйте изменить поисковый запрос.' : 'Начните первый диалог, чтобы он появился здесь.' }}
             </span>
           </div>
         </section>
@@ -668,5 +715,21 @@ const earlierSessions = computed(() =>
     grid-column: 2;
     grid-row: 1 / 4;
   }
+}
+
+/* Сворачивание панели истории */
+.dialog-sidebar { position: relative; overflow: hidden; transition: width .25s ease, padding .25s ease, border-color .25s ease; }
+.dialog-sidebar.collapsed { width: 0 !important; padding-left: 0; padding-right: 0; border-right-color: transparent; }
+.sidebar-content, .sidebar-user { min-width: 246px; }
+.sidebar-close { position: absolute; right: 12px; top: 18px; border: 0; background: #e2f3ed; color: #0f806d; border-radius: 8px; width: 30px; height: 30px; font-size: 26px; cursor: pointer; }
+.sidebar-toggle { position: absolute; top: 20px; left: 12px; z-index: 2; width: 35px; height: 35px; border: 1px solid #cbd5ce; background: white; color: #0f806d; border-radius: 9px; cursor: pointer; font-size: 21px; }
+.dialog-main { position: relative; }
+.dialog-page:not(.sidebar-collapsed) .sidebar-toggle { display: none; }
+.dialog-page.sidebar-collapsed .dialog-main { padding-top: 65px; }
+.sidebar-session { cursor: pointer; }
+.start-dialog-button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 800px) {
+  .dialog-sidebar.collapsed { height: 0; min-height: 0; padding-top: 0; padding-bottom: 0; }
+  .dialog-sidebar { transition: height .25s ease, padding .25s ease; }
 }
 </style>
