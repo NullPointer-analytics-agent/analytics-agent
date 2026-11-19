@@ -1,7 +1,7 @@
 ﻿using SharedClasses;
 using SharedClasses.ResponseDto;
 using System.Net.Http.Json;
-using System.Text.RegularExpressions;
+//using System.Text.RegularExpressions;
 
 string userPrompt = """
 Сделай модель для умного климат-контроля. Режимы работы системы: Выключен, Обогрев, Охлаждение. Целевая температура задается в строгом диапазоне от 16 до 30 градусов. Также есть датчик открытого окна (включен или выключен).
@@ -45,9 +45,9 @@ while (true)
 
     if(responsePart is ChunkDto chunk)
     {
-        string text = Regex.Unescape(chunk.ChunkText);
-
-        Console.Write(text);
+        //string text = Regex.Unescape(chunk.ChunkText);
+        //Console.Write(text);
+        Console.Write(chunk.ChunkText);
     }
     else
         Console.WriteLine(responsePart?.SerializeMultiLine() ?? "Error: response part is null");
