@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { isBehaviourModelDto, type BehaviourModelDto, type ResponseFrame } from '@/api/behaviour'
 import { useRouter } from 'vue-router'
@@ -12,20 +12,49 @@ interface Session {
   title: string
   description: string
   date: string
+  createdAt: string
+  requirements: string
   status: 'error' | 'success' | 'warning'
+  isLoading: boolean
   statusText: string
-  group: 'today' | 'yesterday' | 'earlier'
+  model: BehaviourModelDto | null
 }
 
-const sessions = ref<Session[]>([])
+const storageKey = computed(() => `analytics-agent-sessions-${authStore.user?.id ?? 'guest'}`)
+function loadSessions(): Session[] {
+  try {
+    const saved = localStorage.getItem(storageKey.value)
+    const parsed: unknown = saved ? JSON.parse(saved) : []
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (item): item is Session =>
+            item !== null &&
+            typeof item === 'object' &&
+            typeof item.id === 'number' &&
+            typeof item.requirements === 'string' &&
+            typeof item.createdAt === 'string' &&
+            typeof item.title === 'string',
+        )
+      : []
+  } catch {
+    return []
+  }
+}
+const sessions = ref<Session[]>(loadSessions())
+const sidebarOpen = ref(true)
+const searchQuery = ref('')
+const requirements = ref('')
+const activeSessionId = ref<number | null>(null)
+const loadingSessionId = ref<number | null>(null)
 
-const startDialog = ref(false)
+const abortControllers = new Map<number | null, AbortController>()
+
+const isStartDialog = ref(false)
 const isLoading = ref(false)
 const isEditing = ref(true)
 const errorLLM = ref<string | null>(null)
 let abortController: AbortController | null = null
 
-const prompt = ref('')
 const modelResult = ref<BehaviourModelDto | null>(null)
 
 const userName = computed(() => authStore.user?.name || 'Имя Фамилия')
@@ -44,48 +73,60 @@ const initials = computed(() =>
     .toUpperCase(),
 )
 
-const todaySessions = computed(() => sessions.value.filter((session) => session.group === 'today'))
-
+const filteredSessions = computed(() =>
+  sessions.value.filter((session) =>
+    `${session.title} ${session.description} ${session.requirements}`
+      .toLowerCase()
+      .includes(searchQuery.value.toLowerCase().trim()),
+  ),
+)
+function groupFor(session: Session): 'today' | 'yesterday' | 'earlier' {
+  const date = new Date(session.createdAt)
+  const now = new Date()
+  if (date.toDateString() === now.toDateString()) return 'today'
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) return 'yesterday'
+  return 'earlier'
+}
+const todaySessions = computed(() => filteredSessions.value.filter((s) => groupFor(s) === 'today'))
 const yesterdaySessions = computed(() =>
-  sessions.value.filter((session) => session.group === 'yesterday'),
+  filteredSessions.value.filter((s) => groupFor(s) === 'yesterday'),
 )
-
 const earlierSessions = computed(() =>
-  sessions.value.filter((session) => session.group === 'earlier'),
+  filteredSessions.value.filter((s) => groupFor(s) === 'earlier'),
 )
 
-async function askLLM() {
-  if (!prompt.value.trim()) return
+async function askLLM(sessionId: number | null) {
+  if (!requirements.value.trim()) return
 
-  if (abortController) {
-    abortController.abort()
+  // Если для этой сессии уже есть запрос — отменяем его
+  if (abortControllers.has(sessionId)) {
+    abortControllers.get(sessionId)?.abort()
   }
-  abortController = new AbortController()
 
-  startDialog.value = true
+  const controller = new AbortController()
+  abortControllers.set(sessionId, controller)
+
+  const session = sessions.value.find((s) => s.id === sessionId)
+  if (!session) return
+  session.isLoading = true
+  loadingSessionId.value = sessionId
+  isStartDialog.value = true
   isEditing.value = false
-  isLoading.value = true
   errorLLM.value = null
   modelResult.value = null
+  session.model = null
+
   try {
     const response = await fetch(`${import.meta.env.VITE_LLM_API_URL}/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        Prompt: prompt.value,
-      }),
-      signal: abortController!.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Prompt: requirements.value }),
+      signal: controller.signal,
     })
 
-    if (!response.ok) {
-      throw new Error(`Ошибка сервера: ${response.status} ${response.statusText}`)
-    }
-
-    if (!response.body) {
-      throw new Error('Сервер не вернул тело ответа для чтения потока')
-    }
+    if (!response.ok) throw new Error(`Ошибка сервера: ${response.status}`)
+    if (!response.body) throw new Error('Нет тела ответа')
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder('utf-8')
@@ -93,49 +134,81 @@ async function askLLM() {
 
     while (true) {
       const { done, value } = await reader.read()
+      if (done) break
 
-      if (done) {
-        break
-      }
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
-
       buffer = lines.pop() || ''
 
       for (const line of lines) {
         if (!line.trim()) continue
-
         try {
           const frame: ResponseFrame = JSON.parse(line)
-
-          if (frame.type === 'chunk_dto') {
-            continue
-          }
-
-          if (frame.type === 'system_status_dto') {
-            console.log('Статус системы:', frame.Status)
-            continue
-          }
+          if (frame.type === 'chunk_dto' || frame.type === 'system_status_dto') continue
 
           if (isBehaviourModelDto(frame)) {
+            // Ищем сессию, к которой относится этот запрос
+            const session = sessions.value.find((s) => s.id === sessionId)
+
             if (!frame.IsValidPrompt) {
-              console.warn('Невалидный промпт:', frame.ReasonIfInvalid)
-              errorLLM.value = frame.ReasonIfInvalid
+              if (session) {
+                session.status = 'error'
+                session.statusText = frame.ReasonIfInvalid || 'Ошибка'
+                session.model = null
+              }
+
+              if (activeSessionId.value === sessionId) {
+                modelResult.value = null
+                errorLLM.value = frame.ReasonIfInvalid || 'Ошибка'
+                isEditing.value = true
+              }
             } else {
-              console.log('Построена модель поведения:', frame)
-              modelResult.value = frame
-              isLoading.value = false
+              if (session) {
+                session.model = frame
+                session.status = 'success'
+                session.statusText = 'Успешно'
+              }
+              // Показываем модель только если мы смотрим на эту сессию
+              if (activeSessionId.value === sessionId) {
+                modelResult.value = frame
+              }
             }
           }
         } catch (e) {
-          console.error('Ошибка парсинга строки NDJSON:', line, e)
+          console.error('Ошибка парсинга:', e)
         }
       }
     }
-  } catch (error) {
-    console.error('Ошибка при запросе к LLM:', error)
+  } catch (error: any) {
+    if (error.name !== 'AbortError') {
+      console.error('Ошибка:', error)
+      const session = sessions.value.find((s) => s.id === sessionId)
+      if (session) {
+        session.status = 'error'
+        session.statusText = 'Ошибка при запросе к LLM'
+        session.model = null
+      }
+
+      if (activeSessionId.value === sessionId) {
+        modelResult.value = null
+        errorLLM.value = 'Ошибка при запросе к LLM'
+        isEditing.value = true
+      }
+    }
   } finally {
-    isLoading.value = false
+    // Проверяем, что это всё ещё актуальный запрос для сессии
+    if (abortControllers.get(sessionId) === controller) {
+      abortControllers.delete(sessionId)
+      session.isLoading = false
+    }
+
+    if (activeSessionId.value === sessionId) {
+      isLoading.value = false
+    }
+
+    if (loadingSessionId.value === sessionId) {
+      loadingSessionId.value = null
+    }
   }
 }
 
@@ -150,10 +223,19 @@ function formatPropertyName(type: string) {
 }
 
 function edit() {
-  if (abortController) {
-    abortController.abort()
-    abortController = null
+  const currentSessionId = activeSessionId.value
+  if (currentSessionId !== null && abortControllers.has(currentSessionId)) {
+    // Обрываем запрос именно для этой сессии
+    abortControllers.get(currentSessionId)?.abort()
+    abortControllers.delete(currentSessionId)
   }
+
+  const session = sessions.value.find((s) => s.id === currentSessionId)
+  if (session) {
+    session.status = 'warning'
+    session.statusText = ''
+  }
+
   isLoading.value = false
   isEditing.value = true
   errorLLM.value = null
@@ -163,24 +245,131 @@ function handleLogout() {
   authStore.logout()
   router.push('/login')
 }
+
+watch(
+  sessions,
+  (value) => {
+    try {
+      localStorage.setItem(storageKey.value, JSON.stringify(value))
+    } catch {
+      /* Storage unavailable */
+    }
+  },
+  { deep: true },
+)
+watch(storageKey, () => {
+  sessions.value = loadSessions()
+  activeSessionId.value = null
+  requirements.value = ''
+})
+
+function newDialog() {
+  activeSessionId.value = null
+  requirements.value = ''
+  modelResult.value = null
+  errorLLM.value = null
+  isEditing.value = true
+  isStartDialog.value = false
+}
+
+function startDialog(): number | null {
+  const value = requirements.value.trim()
+  if (!value) return null
+  const now = new Date()
+  const session: Session = {
+    id: now.getTime(),
+    title: value.length > 45 ? `${value.slice(0, 45)}…` : value,
+    description: value.length > 85 ? `${value.slice(0, 85)}…` : value,
+    requirements: value,
+    date: now.toLocaleString('ru-RU', {/* ... */}),
+    createdAt: now.toISOString(),
+    status: 'warning',
+    statusText: 'Черновик',
+    isLoading: true,
+    model: null,
+  }
+  sessions.value.unshift(session)
+  activeSessionId.value = session.id
+  return session.id
+}
+
+function handleStartDialog() {
+  let sessionId = activeSessionId.value
+
+  if (sessionId === null) {
+    sessionId = startDialog()
+  } else {
+    saveChanges()
+  }
+
+  if (sessionId !== null) {
+    askLLM(sessionId)
+  }
+}
+
+function openSession(session: Session) {
+  activeSessionId.value = session.id
+  requirements.value = session.requirements
+  modelResult.value = session.model
+  if (session.status !== 'success') errorLLM.value = session.statusText
+  else errorLLM.value = null
+  isStartDialog.value = true
+  isEditing.value = false
+  modelResult.value = session.model
+}
+
+function saveChanges() {
+  const session = sessions.value.find((s) => s.id === activeSessionId.value)
+  if (!session || !requirements.value.trim()) return
+  const value = requirements.value.trim()
+  session.requirements = value
+  session.title = value.length > 45 ? `${value.slice(0, 45)}…` : value
+  session.description = value.length > 85 ? `${value.slice(0, 85)}…` : value
+}
 </script>
 
 <template>
-  <div class="dialog-page">
-    <aside class="dialog-sidebar">
-      <div class="sidebar-content">
+  <div class="dialog-page" :class="{ 'sidebar-collapsed': !sidebarOpen }">
+    <aside class="dialog-sidebar" :class="{ collapsed: !sidebarOpen }">
+      <!-- Закреплённая верхняя часть -->
+      <div class="sidebar-header">
+        <button
+          type="button"
+          class="sidebar-close"
+          aria-label="Свернуть историю"
+          @click="sidebarOpen = false"
+        >
+          ‹
+        </button>
+
         <h1 class="sidebar-logo">Агент-аналитик</h1>
-        <button type="button" class="new-dialog-button">
+
+        <button type="button" class="new-dialog-button" @click="newDialog">
           <span class="plus-icon">+</span>
           Новый диалог
         </button>
 
-        <input class="sidebar-search" type="text" placeholder="Поиск по сессиям" />
+        <input
+          class="sidebar-search"
+          v-model="searchQuery"
+          type="text"
+          placeholder="Поиск по сессиям"
+        />
+      </div>
 
+      <!-- Прокручиваемая история -->
+      <div class="sidebar-history">
+        <!-- СЕГОДНЯ -->
         <div v-if="todaySessions.length > 0" class="sidebar-group">
           <p class="sidebar-group-title">СЕГОДНЯ</p>
 
-          <div v-for="session in todaySessions" :key="session.id" class="sidebar-session">
+          <div
+            v-for="session in todaySessions"
+            :key="session.id"
+            class="sidebar-session"
+            :class="{ selected: activeSessionId === session.id }"
+            @click="openSession(session)"
+          >
             <p class="sidebar-session-title">
               {{ session.title }}
             </p>
@@ -191,10 +380,17 @@ function handleLogout() {
           </div>
         </div>
 
+        <!-- ВЧЕРА -->
         <div v-if="yesterdaySessions.length > 0" class="sidebar-group">
           <p class="sidebar-group-title">ВЧЕРА</p>
 
-          <div v-for="session in yesterdaySessions" :key="session.id" class="sidebar-session">
+          <div
+            v-for="session in yesterdaySessions"
+            :key="session.id"
+            class="sidebar-session"
+            :class="{ selected: activeSessionId === session.id }"
+            @click="openSession(session)"
+          >
             <p class="sidebar-session-title">
               {{ session.title }}
             </p>
@@ -205,10 +401,17 @@ function handleLogout() {
           </div>
         </div>
 
+        <!-- РАНЕЕ -->
         <div v-if="earlierSessions.length > 0" class="sidebar-group">
           <p class="sidebar-group-title">РАНЕЕ</p>
 
-          <div v-for="session in earlierSessions" :key="session.id" class="sidebar-session">
+          <div
+            v-for="session in earlierSessions"
+            :key="session.id"
+            class="sidebar-session"
+            :class="{ selected: activeSessionId === session.id }"
+            @click="openSession(session)"
+          >
             <p class="sidebar-session-title">
               {{ session.title }}
             </p>
@@ -220,28 +423,33 @@ function handleLogout() {
         </div>
       </div>
 
+      <!-- Закреплённая нижняя часть -->
       <div class="sidebar-user">
         <div class="user-avatar">
           {{ initials }}
         </div>
 
         <div class="user-info">
-          <p class="user-name">
-            {{ userName }}
-          </p>
-
-          <p class="user-email">
-            {{ userEmail }}
-          </p>
+          <p class="user-name">{{ userName }}</p>
+          <p class="user-email">{{ userEmail }}</p>
         </div>
+
         <button @click="handleLogout()" class="logout-link">Выйти</button>
       </div>
     </aside>
 
     <main class="dialog-main">
+      <button
+        type="button"
+        class="sidebar-toggle"
+        :aria-label="sidebarOpen ? 'Свернуть историю' : 'Открыть историю'"
+        @click="sidebarOpen = !sidebarOpen"
+      >
+        {{ sidebarOpen ? '‹' : '☰' }}
+      </button>
       <div class="dialog-content">
         <!-- Приветствие -->
-        <header v-if="!startDialog" class="dialog-welcome">
+        <header v-if="!isStartDialog" class="dialog-welcome">
           <h2>Здравствуйте, {{ firstName }}</h2>
 
           <p>Начните новый диалог или вернитесь к прошлой сессии.</p>
@@ -254,13 +462,13 @@ function handleLogout() {
 
           <textarea
             v-if="isEditing"
-            v-model="prompt"
             id="dialog-requirements"
+            v-model="requirements"
             placeholder="Опишите правила системы обычным текстом..."
           ></textarea>
 
           <div v-else class="prompt-readonly-text">
-            {{ prompt }}
+            {{ requirements }}
             <div>
               <p @click="edit()" class="edit">
                 Редактировать
@@ -270,16 +478,32 @@ function handleLogout() {
           </div>
 
           <div class="new-dialog-actions">
-            <button v-if="isEditing" type="button" class="start-dialog-button" @click="askLLM()">
-              Начать диалог
+            <button
+              type="button"
+              @click="handleStartDialog"
+              class="start-dialog-button"
+              :disabled="!requirements.trim()"
+              v-if="isEditing"
+            >
+              {{ activeSessionId === null ? 'Начать диалог' : 'Сохранить изменения' }}
             </button>
           </div>
         </section>
-        <div v-if="isLoading" class="thinking-spinner">
+        <div
+          v-if="sessions.find((s) => s.id === activeSessionId)?.isLoading"
+          class="thinking-spinner"
+        >
           <div class="spinner"></div>
           <p class="thinking-text">Я очень стараюсь. Подождите минутку))</p>
         </div>
-        <p v-if="errorLLM">{{ errorLLM }}</p>
+        <p
+          v-if="
+            activeSessionId && sessions.find((s) => s.id === activeSessionId)?.status === 'error'
+          "
+          class="error-content"
+        >
+          {{ errorLLM }}
+        </p>
 
         <div v-if="modelResult" class="result-content">
           <div class="result-sections-wrapper">
@@ -403,10 +627,10 @@ function handleLogout() {
           </div>
         </div>
 
-        <section v-if="!startDialog" class="session-history">
+        <section v-if="!isStartDialog" class="session-history">
           <h3>История сессий</h3>
-          <div v-if="sessions.length > 0" class="history-table">
-            <div v-for="session in sessions" :key="session.id" class="history-row">
+          <div v-if="filteredSessions.length > 0" class="history-table">
+            <div v-for="session in filteredSessions" :key="session.id" class="history-row">
               <span class="history-name">
                 {{ session.title }}
               </span>
@@ -416,17 +640,24 @@ function handleLogout() {
               </span>
 
               <span class="history-status" :class="session.status">
-                {{ session.statusText }}
+                {{ { error: 'Ошибка', success: 'Успешно', warning: 'Черновик' }[session.status] }}
               </span>
-
-              <button type="button" class="open-session-button">Открыть</button>
+              <button type="button" class="open-session-button" @click="openSession(session)">
+                Открыть
+              </button>
             </div>
           </div>
 
           <div v-else class="empty-history">
-            <p>У вас пока нет диалогов</p>
+            <p>{{ sessions.length ? 'Ничего не найдено' : 'У вас пока нет диалогов' }}</p>
 
-            <span> Начните первый диалог, чтобы он появился здесь. </span>
+            <span>
+              {{
+                sessions.length
+                  ? 'Попробуйте изменить поисковый запрос.'
+                  : 'Начните первый диалог, чтобы он появился здесь.'
+              }}
+            </span>
           </div>
         </section>
       </div>
@@ -435,6 +666,13 @@ function handleLogout() {
 </template>
 
 <style scoped>
+.error-content {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 .thinking-spinner {
   display: flex;
   flex-direction: column;
@@ -819,23 +1057,50 @@ function handleLogout() {
 .dialog-sidebar {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   flex-shrink: 0;
+
   width: 330px;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+
   padding: 28px 17px 25px;
+
   background-color: #ffffff;
   border-right: 1px solid #dce2dd;
+
   position: sticky;
   top: 0;
-  height: 100vh;
-  overflow-y: auto;
+
+  overflow: hidden;
 }
 
-.sidebar-content {
+/* Верхняя закреплённая часть */
+.sidebar-header {
+  flex-shrink: 0;
   width: 100%;
 }
 
+/* Область прокрутки */
+.sidebar-history {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Нижняя закреплённая часть */
+.sidebar-user {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  margin-top: 16px;
+  padding: 16px 12px 0;
+
+  border-top: 1px solid #d5ded8;
+}
 .sidebar-logo {
   margin: 0 12px 16px;
   font-size: 22px;
@@ -926,14 +1191,6 @@ function handleLogout() {
   color: #697670;
   font-size: 13px;
   line-height: 1.4;
-}
-.sidebar-user {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 28px;
-  padding: 16px 12px 0;
-  border-top: 1px solid #d5ded8;
 }
 
 .user-avatar {
@@ -1235,6 +1492,106 @@ function handleLogout() {
   .open-session-button {
     grid-column: 2;
     grid-row: 1 / 4;
+  }
+}
+
+.dialog-sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  height: 100vh;
+  transition:
+    width 0.25s ease,
+    padding 0.25s ease,
+    transform 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.dialog-sidebar.collapsed {
+  width: 0 !important;
+  padding-left: 0;
+  padding-right: 0;
+  border-right-color: transparent;
+  transform: translateX(-100%);
+}
+
+.dialog-main {
+  margin-left: 330px;
+  transition: margin-left 0.25s ease;
+  position: relative;
+}
+
+.dialog-page.sidebar-collapsed .dialog-main {
+  margin-left: 0;
+  padding-top: 65px;
+}
+
+.sidebar-content,
+.sidebar-user {
+  min-width: 246px;
+}
+
+.sidebar-close {
+  position: absolute;
+  right: 12px;
+  top: 18px;
+  border: 0;
+  background: #e2f3ed;
+  color: #0f806d;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  top: 20px;
+  left: 12px;
+  z-index: 20;
+  width: 35px;
+  height: 35px;
+  border: 1px solid #cbd5ce;
+  background: white;
+  color: #0f806d;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 21px;
+}
+
+.dialog-page:not(.sidebar-collapsed) .sidebar-toggle {
+  display: none;
+}
+
+.sidebar-session {
+  cursor: pointer;
+}
+.start-dialog-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 800px) {
+  .dialog-sidebar {
+    position: fixed;
+    width: 100%;
+    height: auto;
+    bottom: auto;
+  }
+
+  .dialog-main {
+    margin-left: 0;
+  }
+
+  .dialog-sidebar.collapsed {
+    width: 100% !important;
+    height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    transform: none;
   }
 }
 </style>
