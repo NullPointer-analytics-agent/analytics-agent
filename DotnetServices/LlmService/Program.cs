@@ -45,6 +45,9 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddSingleton<PromptParameters>();
+
+
 WebApplication app = builder.Build();
 
 app.UseCors();
