@@ -2,12 +2,6 @@
   <div class="home-page">
     <header class="header">
       <div class="header-left">
-        <button type="button" class="menu-button" aria-label="Открыть меню">
-          <span></span>
-          <span></span>
-          <span></span>
-        </button>
-
         <h1 class="logo">Агент-аналитик</h1>
       </div>
 
@@ -97,29 +91,6 @@
   display: flex;
   align-items: center;
   gap: 16px;
-}
-
-.menu-button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 46px;
-  height: 46px;
-  padding: 0;
-  background-color: #ffffff;
-  border: 1px solid #cbd5ce;
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-.menu-button span {
-  display: block;
-  width: 18px;
-  height: 2px;
-  background-color: #19231f;
-  border-radius: 2px;
 }
 
 .logo {
@@ -348,10 +319,6 @@
     font-size: 17px;
   }
 
-  .menu-button {
-    width: 40px;
-    height: 40px;
-  }
 
   .header-actions {
     gap: 6px;

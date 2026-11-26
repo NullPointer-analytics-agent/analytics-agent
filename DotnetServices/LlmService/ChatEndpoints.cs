@@ -25,7 +25,7 @@ public static class ChatEndpoints
         PromptParameters promptParameters,
         UserRequestDto userRequest,
         CancellationToken connectionToken,
-        string? modelName = "qwen"
+        string? modelName = "deepseek"
 
     )
     {

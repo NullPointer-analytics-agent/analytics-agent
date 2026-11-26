@@ -1,18 +1,12 @@
 ﻿using SharedClasses;
 using SharedClasses.ResponseDto;
 using System.Net.Http.Json;
+//using System.Text.RegularExpressions;
 
 string userPrompt = """
-Явления:
-    Диаметр мяча от 3 до 5.
-    Находится ли мяч в воздухе.
-    Цвет пола в помещении (красный, белый, зеленый)
-
-Начальное состояние:
-    Мяч диаметром 4 лежит на полу белого цвета.
-
-Условие:
-    Мяч на полу, ИЛИ (его диаметр равен 5 И цвет пола не красный)
+Сделай модель для умного климат-контроля. Режимы работы системы: Выключен, Обогрев, Охлаждение. Целевая температура задается в строгом диапазоне от 16 до 30 градусов. Также есть датчик открытого окна (включен или выключен).
+По умолчанию система выключена, целевая температура установлена на 20, окно закрыто.
+Важное правило безопасности: если окно открыто, система физически не может находиться в режимах Обогрева или Охлаждения. Мы хотим быть уверены, что при нормальных условиях можно перевести систему в режим Обогрева. Также проверь, нет ли в системе тупиковых состояний (например, если окно открыто, у нас всё равно должна быть возможность выключить систему или закрыть окно, чтобы не зависнуть навсегда).
 """;
 
 
@@ -49,5 +43,12 @@ while (true)
 
     ResponseDtoBase? responsePart = ResponseDtoBase.FromString(line);
 
-    Console.WriteLine(responsePart?.SerializeMultiLine() ?? "Error: response part is null");
+    if(responsePart is ChunkDto chunk)
+    {
+        //string text = Regex.Unescape(chunk.ChunkText);
+        //Console.Write(text);
+        Console.Write(chunk.ChunkText);
+    }
+    else
+        Console.WriteLine(responsePart?.SerializeMultiLine() ?? "Error: response part is null");
 }
