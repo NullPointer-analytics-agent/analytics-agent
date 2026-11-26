@@ -24,8 +24,7 @@ public static class ChatEndpoints
         IPromptHandler handler, 
         PromptParameters promptParameters,
         UserRequestDto userRequest,
-        CancellationToken connectionToken,
-        string? modelName = "deepseek"
+        CancellationToken connectionToken
 
     )
     {
@@ -33,22 +32,9 @@ public static class ChatEndpoints
 
         context.Response.ContentType = "text/x-ndjson; charset=utf-8";
 
-        IChatCompletionService? completionService;
-
-        try
-        {
-            completionService = kernel.GetRequiredService<IChatCompletionService>(modelName);
-        }
-
-        catch (KernelException)
-        {
-            throw new InvalidLlmNameException();
-        }
-
         IAsyncEnumerable<ResponseDtoBase> response = handler.GenerateAnswerAsync(
             userPrompt,
             promptParameters,
-            completionService,
             connectionToken
         );
 

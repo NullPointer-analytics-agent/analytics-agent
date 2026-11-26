@@ -14,18 +14,19 @@ public interface IPromptHandler
     IAsyncEnumerable<ResponseDtoBase> GenerateAnswerAsync(
         string userPrompt,
         PromptParameters promptParameters,
-        IChatCompletionService chatCompletionService,
         CancellationToken connectionToken = default
     );
 }
 
 
-public class PromptHandler: IPromptHandler
+public class PromptHandler (IChatCompletionService completionService): IPromptHandler 
 {
+    private readonly IChatCompletionService _completionService = completionService;
+
+
     public async IAsyncEnumerable<ResponseDtoBase> GenerateAnswerAsync(
         string userPrompt,
         PromptParameters promptParameters,
-        IChatCompletionService completionService,
         [EnumeratorCancellation] CancellationToken connectionToken = default
     )
     { 
@@ -34,7 +35,7 @@ public class PromptHandler: IPromptHandler
         promptParameters.AddSystemPromptsToHistory(history);
         history.AddUserMessage(userPrompt);
 
-        await using IAsyncEnumerator<StreamingChatMessageContent> resultEnumerator = completionService.GetStreamingChatMessageContentsAsync(
+        await using IAsyncEnumerator<StreamingChatMessageContent> resultEnumerator = _completionService.GetStreamingChatMessageContentsAsync(
             chatHistory: history,
             executionSettings: promptParameters.PromptExecutionSettings,
             cancellationToken: connectionToken
